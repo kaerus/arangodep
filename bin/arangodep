@@ -24,7 +24,8 @@ var arango = require('arango.client')
   , crypto = require('crypto'),
   , util = require('util')
   , path = require('path')
-  , fs = require('fs');
+  , fs = require('fs')
+  , data, file;
 
 function show_help() {
   console.log("arangodep v0.1 by Anders Elo <anders @ kaerus com>.");
@@ -39,13 +40,6 @@ function show_help() {
 
   process.exit(0);
 }  
-
-function show_help() {
-  console.log("Publish <files> <arango server>");
-  process.exit(0);
-}
-
-var data, file;
 
 if( process.argv.length < 3 ) 
   show_help();

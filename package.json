@@ -16,7 +16,7 @@
     "anders elo <anders@kaerus.com>"
   ],
   "dependencies": {
-  	"arango.client:">=0.4.0"
+  	"arango.client":">=0.4.0"
   },
   "bin": {
     "arangodep":"bin/arangodep"

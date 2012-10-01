@@ -35,8 +35,8 @@ function show_help() {
   console.log("\t--expires \tExpiry date on index");
   console.log("\t--download\tDownload content");
   console.log("\t--upload  \tUpload content");
-  console.log("\t--force   \tUse the force");
-  console.log("\t--module  \tProcess module");
+  console.log("\t--watch   \tWatch for changes");
+  console.log("\t--module  \tProcess module (TBD)");
 
   process.exit(0);
 }  
@@ -198,7 +198,7 @@ if(execute.command === 'upload') {
   }
   
   /* update .index */
-  var expiry = new Date(2025,0,0);
+  var expiry = execute.expiry || new Date(2025,0,0); // make up expiry date if none specified
   db.key.put(execute.remotedir+"/.index", 
         {expires:expiry}, JSON.stringify(file_list), 
           function(err,ret) {
@@ -239,7 +239,7 @@ function upload_file(file,dest,db) {
             contentType = 'image/svg+xml';    
             break;
   }
-  var expiry = new Date(2025,0,0);
+  var expiry = execute.expiry || new Date(2025,0,0);
   var md5 = crypto.createHash('md5').update(data).digest('hex');  
   db.key.put(dest, {expires:expiry,extended:{contentType:contentType,md5:md5}},
             binary ? data.toString('base64') : data,function(err,ret){

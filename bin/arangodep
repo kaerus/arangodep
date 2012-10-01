@@ -21,7 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 var arango = require('arango.client')
-  , crypto = require('crypto'),
+  , crypto = require('crypto')
   , util = require('util')
   , path = require('path')
   , fs = require('fs')

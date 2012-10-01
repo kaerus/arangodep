@@ -1,0 +1,236 @@
+#!/usr/bin/env node
+/*
+ * Copyright (c) 2012 Kaerus, Anders Elo <anders @ kaerus com>.
+ 
+ * Permission is hereby granted, free of charge, to any person obtaining a 
+ * copy of this software and associated documentation files (the "Software"), 
+ * to deal in the Software without restriction, including without limitation 
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+ * and/or sell copies of the Software, and to permit persons to whom the 
+ * Software is furnished to do so, subject to the following conditions:
+
+ * The above copyright notice and this permission notice shall be included in 
+ * all copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+ * DEALINGS IN THE SOFTWARE.
+ */
+var fs = require('fs')
+  , arango = require('arango.client')
+  , util = require('util')
+  , path = require('path');
+  
+
+function show_help() {
+  console.log("arangodep v0.1 by Anders Elo <anders @ kaerus com>.");
+  console.log("Command: arangodep <options> <source> <destination>");
+  console.log("Options:");
+  console.log("\t--remove  \tDelete content");
+  console.log("\t--expires \tExpiry date on index");
+  console.log("\t--download\tDownload content");
+  console.log("\t--upload  \tUpload content");
+  console.log("\t--force   \tUse the force");
+  console.log("\t--module  \tProcess module");
+
+  process.exit(0);
+}
+
+var data, file;
+
+if( process.argv.length < 3 ) 
+  show_help();
+
+var cmd = { server: null,
+            file: null,
+            directory: null,
+            remotedir: "",
+            upload: false,
+            force: false,
+            removal: false
+          };
+
+for(var i = 2, options; option = process.argv[i]; i++)
+{
+    switch(option) {
+      case '--remove': cmd.removal =  true;
+        break;
+      case '--expires': cmd.expiry = new Date(Date.parse(process.argv[++i],"yyyy-MM-dd HH:MM:SS"));
+        break;
+      case '--download': cmd.server = process.argv[++i];
+        cmd.upload = false;
+        break;
+      case '--upload': file = process.argv[++i].replace(/\/$/,'');
+        cmd.upload = true;
+        break;
+      case '--force': cmd.force = true;
+        break;
+      case '--module': cmd.module = true;
+        break;  
+      default:
+        if(!file) file = option.replace(/\/$/,'');
+        else if(!cmd.server) cmd.server = option;
+        break;
+    }
+}
+
+console.log("cmd", util.inspect(cmd));
+try {
+  var stat = fs.statSync(file);
+  /* determine the type of file */
+  if(stat.isDirectory()) cmd.directory = file;
+  else if(stat.isFile()) cmd.file = file;
+} catch(e) {
+  if(cmd.upload) {
+    console.log("File error:", e.message);
+    process.exit(e.code);
+  } else {
+    /* create directory */
+    try {
+      fs.mkdirSync(file);
+    } catch(e) {
+      console.log("mkdir error:", e.message);
+      process.exit(e.code);
+    } 
+      /* set directory */
+      cmd.directory = file;
+      cmd.file = null;
+  }  
+}
+
+var file_list = {remote:cmd.server,files:[]};
+
+/* configure the arango client */
+db = new arango.Connection(cmd.server);
+var x = db.config.name.split(':');
+db.config.name = x[0]; 
+cmd.remotedir = x[1].replace(/^\//,'').replace(/\/$/,'');
+
+if(!cmd.upload) {
+  console.log("Retrieving files...");
+  db.key.get(cmd.remotedir+'/.index',function(err,ret,hdr){
+    console.log("hdr:", util.inspect(hdr) );
+    /* write index to destdir */
+    if(!err)
+    try {
+      file_list = JSON.parse(hdr['x-voc-extended']);
+      fs.writeFile(cmd.directory+'/.index','w',JSON.stringify(file_list), function(err){
+        if(!err) {
+          console.log("Retrieved file .index", util.inspect(file_list));
+        } else {
+          console.log("Failed to create .index",ret);
+          process.exit(err);
+       }
+      });
+    
+    } catch(e) {
+      console.log("Failed to retrieve .index:", e.message);
+      process.exit(e.code);
+    } else if( cmd.force ) {
+      console.log("Forcing retrieval");
+    }
+    
+    if(!err || cmd.force){
+      /* Retrieve files */
+      retrieve_files(file_list,cmd.directory,db);
+    }
+    
+  });
+}
+
+
+if(cmd.directory && cmd.upload) {
+  var readFiles = function(dir,base) {
+    var files = fs.readdirSync(dir), extname;
+    for(x in files) {
+      try {
+          var file = dir+'/'+files[x]
+            , basepath = base+'/'+files[x];
+          stat = fs.statSync(file);
+          if(stat.isDirectory()) {
+            readFiles(file,basepath);
+          } else if(stat.isFile()) {
+            extname = path.extname(file);
+            switch(extname) {
+              case '.html':
+              case '.css': 
+              case '.js':
+              case '.png':
+              case '.gif':
+              case '.jpg':
+              case '.ico':
+                process_file(file,cmd.remotedir+basepath,db);
+                file_list.files.push(cmd.remotedir+basepath);
+                break;
+              default: 
+                console.log("* Skipping file:",file);
+                break;  
+            }
+            
+          }  
+        } catch(e) { 
+          console.log("File error:", e.message); 
+        }
+        
+    }
+  }
+  readFiles(cmd.directory,"");
+} else if(cmd.file && cmd.upload) {
+  process_file(cmd.file,"",db);
+} 
+  
+if(cmd.upload) {
+  var expiry = new Date(2025,0,0);
+  db.key.put(cmd.remotedir+"/.index", {expires:expiry,extended:file_list}, null, function(err,ret) {
+              if(err) console.log("error(%s):", err, ret );
+              else console.log("Uploaded files & .index");
+            }); 
+} 
+
+
+function process_file(file,dest,db) {
+  var binary, compress, data, extname, contentType = "text/html";
+
+  try{
+    data = fs.readFileSync(file);
+  } catch(e){
+    console.log("File read error:", e.message);
+    return;
+  }  
+  extname = path.extname(file);
+  switch (extname) {
+          case '.gif':          
+          case '.png':          
+          case '.jpeg': 
+          case '.jpg':   
+            contentType = 'image/' + extname.replace(/^[\.]/,'');
+            binary = true;
+            break;
+          case '.js':   
+            contentType = 'text/javascript';  
+            compress = true; 
+            break;
+          case '.css':  
+            contentType = 'text/css';         
+            break;
+          case '.svg':  
+            contentType = 'image/svg+xml';    
+            break;
+  }
+  
+  console.log("%s --> %s:%s (%s)", file, db.config.name, dest, contentType);
+  var expiry = new Date(2025,0,0);
+  
+  db.key.put(dest, {expires:expiry,extended:{contentType:contentType}},
+            binary ? data.toString('base64') : data,function(err,ret){
+              if(err) console.log("error(%s):", err, ret );
+            }); 
+}
+
+function retrieve_files(file_list,destdir,db) {
+  console.log("Retrieving files:", util.inspect(file_list));  
+} 

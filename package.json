@@ -1,0 +1,33 @@
+{
+  "name": "arangodep",
+  "version": "0.1.0",
+  "description": "ArangoDB deployment tool",
+  "keywords": [
+    "arango client",
+    "arangodb",
+    "nosql"
+  ],
+  "author": { 
+    "name": "Kaerus",
+    "email": "contact@kaerus.com",
+    "web": "http://kaerus.com"
+  },
+  "contributors": [
+    "anders elo <anders@kaerus.com>"
+  ],
+  "dependencies": {
+  	"arango.client:">=0.4.0"
+  },
+  "bin": {
+    "arangodep":"bin/arangodep"
+  },
+  "bugs": {
+    "url": "https://github.com/kaerus/arangodep/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kaerus/arangodep.git"
+  },
+  "main": "index.js",
+  "license": "MIT"
+}

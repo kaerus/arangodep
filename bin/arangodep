@@ -28,8 +28,8 @@ var arango = require('arango.client')
   , path = require('path')
   , fs = require('node-fs')
   , deploy = {
-      store: {command: process_store, brief: "deploy key-value"},
-      module: {command: process_module, brief: "deploy module"}
+      store: {command: process_store, brief: "deploy files as key-values"},
+      module: {command: process_module, brief: "deploy files as modules"}
     }, program;
 
 
@@ -66,10 +66,7 @@ String.prototype.pad = function(justify,chr) {
 process.argv.shift(); 
 program = path.basename(process.argv.shift()); 
 
-/*
-if(!file) file = option.replace(/\/$/,'');
-else if(!execute.server) execute.server = option;
-*/
+if(process.argv.length < 2) show_help();
 
 try {
   deploy[process.argv[0]].command.call(null,process.argv);
@@ -107,7 +104,7 @@ function process_store(argv) {
     console.log("Command:", program + ' ' + command + " <options> <sources> <destination>");
     console.log("Options:");
     console.log("-h --help".pad(16),"Shows this help" );
-    console.log("-e --expiry".pad(16),"Set Expiry date");
+    console.log("-e --expiry".pad(16),"Set Expiry date 'yyyy-mm-dd HH:MM:SS'");
     process.exit(0);
   }
 

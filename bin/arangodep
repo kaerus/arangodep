@@ -20,280 +20,244 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
  * DEALINGS IN THE SOFTWARE.
  */
+
 var arango = require('arango.client')
   , crypto = require('crypto')
   , util = require('util')
+  , mime = require('mime')
   , path = require('path')
-  , fs = require('fs')
-  , data, file;
+  , fs = require('node-fs')
+  , deploy = {
+      store: {command: process_store, brief: "deploy key-value"},
+      module: {command: process_module, brief: "deploy module"}
+    }, program;
+
 
 function show_help() {
-  console.log("arangodep v0.1 by Anders Elo <anders @ kaerus com>.");
-  console.log("Command: arangodep <options> <source> <destination>");
-  console.log("Options:");
-  console.log("\t--remove  \tDelete content");
-  console.log("\t--expires \tExpiry date on index");
-  console.log("\t--download\tDownload content");
-  console.log("\t--upload  \tUpload content");
-  console.log("\t--watch   \tWatch for changes");
-  console.log("\t--module  \tProcess module (TBD)");
-
+  console.log("Arango deployment tools v0.2 by Anders Elo <anders @ kaerus com>.");
+  console.log("Commands:");
+  Object.keys(deploy).forEach(function(command){
+    console.log("%s:",command.pad(-16),deploy[command].brief)
+  });
+  console.log("type: 'arangodep <command> --help' for more information.");
   process.exit(0);
 }  
 
-if( process.argv.length < 3 ) 
-  show_help();
+/* returns a fixed width padded string */
+String.prototype.pad = function(justify,chr) {
+  var str, args, width = Math.abs(justify), chr = chr || ' ', a, b;
+  
+  args = this.split('');
+  args.unshift(this.length);
+  if(justify >= 0) args.unshift(0);
+  else args.unshift(width-this.length); 
 
-var execute = {  server: null,
-              file: null,
-              directory: null,
-              remotedir: "",
-              command: ""
-            };
+  str = new Array(width);
+  /* apply padding from a to b */
+  a = justify < 0 ? 0 : this.length;
+  b = justify < 0 ? width-this.length : width;
+  for(var i = a; i < b; i++) str[i] = chr; 
+  
+  Array.prototype.splice.apply(str,args);
 
-var file_list = {};
-
-for(var i = 2, options; option = process.argv[i]; i++)
-{
-    switch(option) {
-      case '--remove': 
-        execute.command = "remove";
-        break;
-      case '--expires': 
-        execute.expiry = new Date(Date.parse(process.argv[++i],"yyyy-MM-dd HH:MM:SS"));
-        break;
-      case '--download': 
-        execute.server = process.argv[++i];
-        execute.command = "download";
-        break;
-      case '--upload': 
-        file = process.argv[++i].replace(/\/$/,'');
-        execute.command = "upload";
-        break;
-      case '--watch': execute.command = "watch";
-        break;     
-      default:
-        if(!file) file = option.replace(/\/$/,'');
-        else if(!execute.server) execute.server = option;
-        break;
-    }
+  return str.join('');
 }
+
+process.argv.shift(); 
+program = path.basename(process.argv.shift()); 
+
+/*
+if(!file) file = option.replace(/\/$/,'');
+else if(!execute.server) execute.server = option;
+*/
 
 try {
-  var stat = fs.statSync(file);
-  /* determine the type of file */
-  if(stat.isDirectory()) { 
-    execute.directory = file;
-  }  
-  else if(stat.isFile()) execute.file = file;
-  if(execute.command === 'watch') {
-      /* get files .index on watch */
-      var update_file = execute.directory + '/.index'; 
-      try {
-        file_list = JSON.parse(fs.readFileSync(update_file));
-        console.log("File list:", util.inspect(file_list) );
-        execute.server = file_list.remote;
-      } catch(e) {
-        console.log("Index file error:", e.message );
-        process.exit(e.code);
-      }   
-  }
+  deploy[process.argv[0]].command.call(null,process.argv);
 } catch(e) {
-  if(execute.command === 'download') {
-    /* create download directory */
-    try {
-      fs.mkdirSync(file);
-    } catch(e) {
-      console.log("mkdir error:", e.message);
-      process.exit(e.code);
-    } 
-      /* set download directory */
-      execute.directory = file;
-      execute.file = null;
-  } else {
-    console.log("File error:", e.message);
-    process.exit(e.code);
-  }  
-}
-
-
-
-/* configure the arango client */
-db = new arango.Connection(execute.server);
-var x = db.config.name.split(':');
-db.config.name = x[0]; 
-execute.remotedir = x[1].replace(/^\//,'').replace(/\/$/,'');
-
-
-if(execute.command === 'watch') {
-  console.log("Watch: ", util.inspect(execute) );
-}
-
-file_list = {remote:execute.server,basedir:execute.remotedir,paths:[],files:[]};
-
-
-if(execute.command === 'download') {
-  db.key.get(execute.remotedir+'/.index',function(err,ret,hdr){
-    if(err) {
-      console.log("Failed to get .index, error(%s):", err, ret, hdr );   
-    } else {
-      try {
-        file_list = JSON.parse(ret);
-        fs.writeFile(execute.directory+'/.index',JSON.stringify(file_list),function(err){
-          if(err) {
-            console.log("Failed to create .index: ", err);
-            process.exit(err);
-          } else {
-            download_files(file_list,execute.directory,db);
-          }
-        });
-      } catch(e) {
-        console.log("Failed to retrieve .index:", e.message);
-        process.exit(e.code);
-      }
-    }   
-  });
-}
-
-if(execute.command === 'upload') {
-  /* upload directory & subdirs */
-  if(execute.directory) {
-    var readFiles = function(dir,base) {
-      var files = fs.readdirSync(dir), extname;
-      for(x in files) {
-        try {
-          var file = dir+'/'+files[x]
-            , basepath = base+'/'+files[x];
-          stat = fs.statSync(file);
-          if(stat.isDirectory()) {
-            file_list.paths.push(basepath);
-            readFiles(file,basepath);
-          } else if(stat.isFile()) {
-            extname = path.extname(file);
-            switch(extname) {
-               case '.html':
-               case '.css': 
-               case '.js':
-               case '.png':
-               case '.gif':
-               case '.jpg':
-               case '.ico':
-                 upload_file(file,execute.remotedir+basepath,db);
-                 file_list.files.push(basepath.replace(/^[\.\/]/,''));
-               break;
-               default: 
-                 console.log("* Skipping file:",file);
-               break;  
-            }
-            
-          }  
-        } catch(e) { 
-            console.log("File error:", e.message); 
-        } // try   
-      } // for  
-    } // readFiles()
-    readFiles(execute.directory,"");
-  } else if(execute.file) {
-    upload_file(execute.file,"",db);
-  }
-  
-  /* update .index */
-  var expiry = execute.expiry || new Date(2025,0,0); // make up expiry date if none specified
-  db.key.put(execute.remotedir+"/.index", 
-        {expires:expiry}, JSON.stringify(file_list), 
-          function(err,ret) {
-            if(err) console.log("Files .index error(%s):", err, ret ); 
-            else console.log("Files .index:", util.inspect(file_list));
-          }); 
+  console.log("Error(%s):", e.code, e.message);
+  process.exit(e.code);
 }  
-  
 
-
-function upload_file(file,dest,db) {
-  var binary, data, extname, contentType = "text/html";
-
-  try {
-    data = fs.readFileSync(file);
-  } catch(e) {
-    console.log("File read error:", e.message);
-    return;
-  }  
-  extname = path.extname(file);
-  switch (extname) {
-          case '.gif':          
-          case '.png':          
-          case '.jpeg': 
-          case '.jpg': 
-          case '.ico':
-            contentType = 'image/' + extname.replace(/^[\.]/,'');
-            binary = true;
-            break;
-          case '.js':   
-            contentType = 'text/javascript';  
-            compress = true; 
-            break;
-          case '.css':  
-            contentType = 'text/css';         
-            break;
-          case '.svg':  
-            contentType = 'image/svg+xml';    
-            break;
+function isBinary(file) {
+  switch(path.extname(file)){
+    case '.html':
+    case '.htm':
+    case '.js':
+    case '.json':
+    case '.css':
+    case '.txt':
+    case '.md':
+      return false;
   }
-  var expiry = execute.expiry || new Date(2025,0,0);
-  var md5 = crypto.createHash('md5').update(data).digest('hex');  
-  db.key.put(dest, {expires:expiry,extended:{contentType:contentType,md5:md5}},
-            binary ? data.toString('base64') : data,function(err,ret){
-              if(err) console.log("Write error(%s):", err, ret );
-            }); 
+  return true;
 }
 
-function download_files(file_list,destdir,db) {  
+/* Handles deployment to/from the arangodb key-value store */
+function process_store(argv) {
+  var command = argv.shift()
+    , options = {}
+    , files = []
+    , sources
+    , destination
+    , toLocal
+    , stat
+    , x;
 
-   console.log(util.inspect(file_list) );
-   
-  /* create directory structure */
-  for(var x in file_list.paths) {
-    try {
-      console.log("Creating directory:", destdir+file_list.paths[x]);
-      fs.mkdirSync(destdir+file_list.paths[x]);
-    } catch(e) {
-      if(e.code !== 'EEXIST') {
-        console.log("Mkdir failed(%s):", e.code, e.message);
-        process.exit(e.code);
-      }  
+  function help() {
+    console.log("Command:", program + ' ' + command + " <options> <sources> <destination>");
+    console.log("Options:");
+    console.log("-h --help".pad(16),"Shows this help" );
+    console.log("-e --expiry".pad(16),"Set Expiry date");
+    process.exit(0);
+  }
+
+  for(i = 0; i < argv.length; i++) {
+    switch(argv[i]) {
+      case '-h':
+      case '--help':
+        help();
+        break;
+      case '-e':
+      case '--expiry':
+        options.expiry = new Date(Date.parse(argv[++i],"yyyyMMdd HH:MM:SS")); 
+         
+        console.log("Epiry: ", options.expiry.toString()); 
+        break;  
+      default:
+        files.push(argv[i]);
+        break;
     }
   }
-  
-  file_list.files.forEach(function(file) {
-    download_file(file_list.basedir,destdir,file,db);
+
+  if(files.length < 2)
+    throw {message: "source and destination required", code: -1};
+
+  /* get sources & destination */
+  sources = files.splice(0,files.length-1);
+  destination = files[0];
+
+  /* determine if destination is local or remote */
+  if(destination.match(/^http?:s:/)) toLocal = false;
+  else toLocal = true;
+
+  /* process sources */
+  sources.forEach(function(source){  
+    if(toLocal) { 
+      /* destination is local */
+        try { 
+          stat = fs.statSync(destination);
+          if(!stat.isDirectory())
+            throw {message:"destination must be a directory", code:-2} 
+        }
+        catch(e){
+          try { fs.mkdirSync(destination,0777,true);
+            console.log("Created directory", destination); 
+          } catch(err) { throw err }  
+        }   
+      try {
+        source = new arango.Connection(source);
+        /* strip out collection name */
+        x = source.config.name.split(':');
+        source.config.name = x[0];
+        /* keep basedir */
+        source.basedir = x[1].replace(/^\//,'').replace(/\/$/,'');
+      } catch (err) {
+        throw {message:'source invalid or unavailable', code:-3 }
+      }     
+
+      source.key.list(source.basedir,function(err,ret){
+        if(err) throw {message:ret,code:err}
+        ret.forEach(function(file){
+          remote_to_local(source,file,destination,options);
+        });  
+      });
+    } else {   
+      /* destination is remote */
+      destination = new arango.Connection(destination);
+      /* strip out collection name */
+      x = destination.config.name.split(':');
+      destination.config.name = x[0];
+      /* keep basedir */
+      destination.basedir = x[1].replace(/^\//,'').replace(/\/$/,'');  
+
+      if(stat.isDirectory()){
+        /* upload entire directory & subdirs */
+        var readFiles = function(dir,base) {
+          var files = fs.readdirSync(dir), extname;
+          files.forEach(function(file){
+            try {
+             var filepath = dir+'/'+file
+               , basepath = base+'/'+file;
+              stat = fs.statSync(filepath);
+              /* subdirs */
+              if(stat.isDirectory()) {
+                //file_list.paths.push(basepath);
+                readFiles(filepath,basepath);
+              } else if(stat.isFile()) {
+                local_to_remote(filepath,basepath,destination,options);
+              }  
+            } catch(err) { throw err }    
+          });  
+        } // readFiles()
+          readFiles(source,"");
+      } else {
+        local_to_remote(source,source,destination,options);
+      } 
+    } 
+
   });
   
-} 
+  function local_to_remote(source,dest,remote,options) {
+    var bin, data, contentType = mime.lookup(source), md5, destdir;
 
-function download_file(sourcedir,destdir,file,db) {
-  var sourcefile = sourcedir+'/'+file
-    , destfile = destdir+'/'+file;
-  db.key.get(sourcefile).on('result',function(ret,hdr){
-    console.log("Downloading %s (%s bytes)", sourcefile, ret ? ret.length : 0);
+    if(!remote.basedir) 
+        throw{message: "Destination basedir missing", code:-2}
+    if(!(typeof options.expiry === 'object'))
+        throw {message:"expiry date missing", code:-3}
+
+    try {
+      data = fs.readFileSync(source);
+    } catch(err) { throw err } 
+
+    /* create md5 fingerprint */
+    md5 = crypto.createHash('md5').update(data).digest('hex');  
+    destdir = remote.basedir+'/'+dest.replace(/^\.\//,'');
+    bin = isBinary(source);
+    remote.key.put(destdir, {expires:options.expiry,extended:{contentType:contentType,md5:md5}},
+              bin ? data.toString('base64') : data,function(err,ret){
+                if(err) throw {message:ret,code:err};
+                else console.log("Deployed :%s (%s bytes) as %s file", destdir, data.length, bin ? 'binary' : 'text');  
+              }); 
+  }
+
+  function remote_to_local(remote,source,dest,options) {
+    /* note: this assumes we have remote basedir */
+    var bin, destdir, destfile = dest + '/' + source.substr(source.indexOf('/')+1);  
+
+    destdir = path.dirname(destfile);
+    try{ 
+      fs.statSync(destdir); 
+    } catch(e) {
       try {
-        var ext = JSON.parse(hdr['x-voc-extended']);
-      } catch(e) {
-        console.log("Failed to parse header:", e.message);
-        ext = {contentType:"text/html"};
-      } 
-      switch(ext.contentType) {
-            case 'image/gif':
-            case 'image/png':
-            case 'image/jpg':
-            case 'image/jpeg':
-            case 'image/ico':
-              var bin = new Buffer(ret,'base64').toString('binary');
-            default:
-            break;
-      }
-      fs.writeFile(destfile,bin ? bin : ret, bin ? 'binary' : 'utf-8',function(e) {
-        if(e) console.log("Failed to write file:",e);
-      });        
-  });   
+        fs.mkdirSync(destdir,0777, true);
+      } catch(err){ throw err }
+      console.log("Created directory", destdir);
+    }
+
+    remote.key.get(source).on('result',function(ret,hdr){
+      console.log("Downloaded %s (%s bytes)", destfile, ret ? ret.length : 0);
+        try {
+          if(isBinary(source)){
+            fs.writeFileSync(destfile,new Buffer(ret,'base64').toString('binary'),'binary');
+          } else {
+            fs.writeFileSync(destfile,ret,'utf-8');
+          } 
+        } catch(err) { throw err }       
+    });   
+
+  }
+} /* end of process_store */
+
+function process_module(argv) {
 
 }

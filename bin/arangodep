@@ -34,7 +34,7 @@ var arango = require('arango.client')
 
 
 function show_help() {
-  console.log("Arango deployment tools v0.2 by Anders Elo <anders @ kaerus com>.");
+  console.log("Arango deployment tools v0.2 by Anders Elo <anders @ kaerus com>.");
   console.log("Commands:");
   Object.keys(deploy).forEach(function(command){
     console.log("%s:",command.pad(-16),deploy[command].brief)
@@ -111,7 +111,7 @@ function process_store(argv) {
     process.exit(0);
   }
 
-  for(i = 0; i < argv.length; i++) {
+  for(i = 0; i < argv.length; i++) {
     switch(argv[i]) {
       case '-h':
       case '--help':
@@ -237,7 +237,7 @@ function process_store(argv) {
     destdir = path.dirname(destfile);
     try{ 
       fs.statSync(destdir); 
-    } catch(e) {
+    } catch(e) {
       try {
         fs.mkdirSync(destdir,0777, true);
       } catch(err){ throw err }

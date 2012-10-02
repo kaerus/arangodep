@@ -119,9 +119,8 @@ function process_store(argv) {
         break;
       case '-e':
       case '--expiry':
-        options.expiry = new Date(Date.parse(argv[++i],"yyyyMMdd HH:MM:SS")); 
-         
-        console.log("Epiry: ", options.expiry.toString()); 
+        options.expiry = new Date(Date.parse(argv[++i],"yyyy-MM-dd HH:MM:SS")); 
+        console.log("Epiry date: ", options.expiry.toString()); 
         break;  
       default:
         files.push(argv[i]);
@@ -137,7 +136,7 @@ function process_store(argv) {
   destination = files[0];
 
   /* determine if destination is local or remote */
-  if(destination.match(/^http?:s:/)) toLocal = false;
+  if(destination.match(/^(?:([A-Za-z]+):)/)) toLocal = false;
   else toLocal = true;
 
   /* process sources */
@@ -179,7 +178,9 @@ function process_store(argv) {
       destination.config.name = x[0];
       /* keep basedir */
       destination.basedir = x[1].replace(/^\//,'').replace(/\/$/,'');  
-
+      try { 
+          stat = fs.statSync(source); 
+        } catch(err){ throw {message:"source invalid " + err.message,code:err.code} }   
       if(stat.isDirectory()){
         /* upload entire directory & subdirs */
         var readFiles = function(dir,base) {
@@ -221,12 +222,12 @@ function process_store(argv) {
 
     /* create md5 fingerprint */
     md5 = crypto.createHash('md5').update(data).digest('hex');  
-    destdir = remote.basedir+'/'+dest.replace(/^\.\//,'');
+    destdir = remote.basedir+dest.replace(/^\.\//,'');
     bin = isBinary(source);
     remote.key.put(destdir, {expires:options.expiry,extended:{contentType:contentType,md5:md5}},
               bin ? data.toString('base64') : data,function(err,ret){
                 if(err) throw {message:ret,code:err};
-                else console.log("Deployed :%s (%s bytes) as %s file", destdir, data.length, bin ? 'binary' : 'text');  
+                else console.log("Deployed %s (%s bytes) as %s file", destdir, data.length, bin ? 'binary' : 'text');  
               }); 
   }
 

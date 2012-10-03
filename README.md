@@ -1,7 +1,7 @@
 arangodep
 =========
 
-Arango deployment tool 
+Arango deployment tools.
 
 Install
 -------
@@ -12,54 +12,16 @@ sudo npm install https://github.com/kaerus/arangodep -g
 Usage
 -----
 Execute ```arangodep``` to see command options.
-
-Example
--------
-Deploy files from current directory to ```admin``` collection under ```miia``` base index.
-
 ```
-$ arangodep --upload ./ http://127.0.0.1:8529/admin:miia
-* Skipping file: ./.index
-Files .index: { remote: 'http://127.0.0.1:8529/admin:miia',
-  basedir: 'miia',
-  paths: [ '/css', '/images', '/js' ],
-  files: 
-   [ 'css/bh.css',
-     'images/background_darksepia.png',
-     'images/front_page.png',
-     'index.html',
-     'js/advanced.js',
-     'js/app.js',
-     'js/tabs.js',
-     'js/wysihtml5-0.3.0.min.js' ] }
-```     
+$ arangodep
+Arango deployment tools v0.3.2 by Anders Elo <anders @ kaerus com>.
+Commands:
+           store: deploy files as key-values
+          module: deploy files as modules
+           dummy: dummy process
+type: 'arangodep <command> --help' for more information.
+```
 
-Download files from the ```admin``` collection ```miia``` base index to current directory.
-```
-arangodep --download http://127.0.0.1:8529/admin:miia ./
-{ remote: 'http://127.0.0.1:8529/admin:miia',
-  basedir: 'miia',
-  paths: [ '/css', '/images', '/js' ],
-  files: 
-   [ 'css/bh.css',
-     'images/background_darksepia.png',
-     'images/front_page.png',
-     'index.html',
-     'js/advanced.js',
-     'js/app.js',
-     'js/tabs.js',
-     'js/wysihtml5-0.3.0.min.js' ] }
-Creating directory: ./css
-Creating directory: ./images
-Creating directory: ./js
-Downloading miia/index.html (6746 bytes)
-Downloading miia/js/advanced.js (13606 bytes)
-Downloading miia/images/background_darksepia.png (6816 bytes)
-Downloading miia/css/bh.css (4575 bytes)
-Downloading miia/images/front_page.png (141170 bytes)
-Downloading miia/js/tabs.js (1396 bytes)
-Downloading miia/js/wysihtml5-0.3.0.min.js (112525 bytes)
-```
 Warning, this is for test purposes only, use at your own risk! 
 
 License

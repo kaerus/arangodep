@@ -143,10 +143,8 @@ function processFiles(files,callback) {
   /* determine if destination is local or remote */
   if(destination.match(/^(?:([A-Za-z]+):)/)) toLocal = false;
   else toLocal = true;
-  console.log("process destination:", destination);
-
+ 
   sources.forEach(function(source){ 
-    console.log("process source:",source); 
     if(toLocal) { 
       /* destination is local */
         try { 
@@ -225,68 +223,64 @@ function process_store(argv) {
 
 
   processFiles(files,function(source,destination,remote,toLocal){
+    var data, destdir, destfile;
     if(toLocal) {
+      /* get list of files from remote */
       remote.key.list(remote.basedir,function(err,ret){
         if(err) throw {message:ret,code:err}
         ret.forEach(function(sourcefile){
-          remote_to_local(sourcefile,destination,remote,options);
-        });  
+          /* destfile is same as sourcefile without remote basedir */
+          destfile = destination+sourcefile.replace(remote.basedir,'');
+          try{ 
+            fs.statSync(destfile); 
+          } catch(e) {
+            try {
+              destdir = path.dirname(destfile);
+              fs.statSync(destdir);
+            } catch(err){ 
+              fs.mkdirSync(destdir,0777, true);
+              console.log("Created directory", destdir);
+            }
+          }
+
+          remote.key.get(sourcefile).on('result',function(ret,hdr){
+            console.log("Downloaded %s (%s bytes)", destfile, ret ? ret.length : 0);
+            try {
+              if(isBinary(sourcefile)){
+                fs.writeFileSync(destfile,new Buffer(ret,'base64').toString('binary'),'binary');
+              } else {
+                fs.writeFileSync(destfile,ret,'utf-8');
+              } 
+            } catch(err) { throw err }
+          });  
+        });
       });
     } else {
-      local_to_remote(source,destination,remote,options);
+      /* add remote basedir to destfile */
+      if(remote.basedir)
+        destfile = remote.basedir + '/' + destfile;
+
+      if(!(typeof options.expiry === 'object'))
+          throw {message:"expiry date missing", code:-3}
+
+      try {
+        data = fs.readFileSync(sourcefile);
+      } catch(err) { throw err } 
+  
+      remote.key.put(destfile, { 
+          expires:options.expiry,
+          extended:{
+              contentType: mime.lookup(sourcefile),
+              md5: crypto.createHash('md5').update(data).digest('hex')
+            }
+          }, isBinary(sourcefile) ? data.toString('base64') : data, function(err,ret) {
+              if(err) throw {message:ret,code:err};
+              else console.log("Deployed %s (%s bytes)", destfile, data.length);  
+      });   
     }  
+
   });    
 
-  function local_to_remote(sourcefile,destfile,remote,options) {
-    var bin, data, contentType = mime.lookup(sourcefile), md5;
-
-    /* add remote basedir to destfile */
-    if(remote.basedir)
-      destfile = remote.basedir + '/' + destfile;
-
-    console.log("*Deploy %s to %s", sourcefile, destfile);
-
-    if(!(typeof options.expiry === 'object'))
-        throw {message:"expiry date missing", code:-3}
-
-    try {
-      data = fs.readFileSync(sourcefile);
-    } catch(err) { throw err } 
-
-    /* create md5 fingerprint for integrity checks */
-    md5 = crypto.createHash('md5').update(data).digest('hex');  
-    bin = isBinary(sourcefile);
-    remote.key.put(destfile, {expires:options.expiry,extended:{contentType:contentType,md5:md5}},
-              bin ? data.toString('base64') : data,function(err,ret){
-                if(err) throw {message:ret,code:err};
-                else console.log("Deployed %s (%s bytes) as %s file", destfile, data.length, bin ? 'binary' : 'text');  
-              });           
-  }
-
-  function remote_to_local(sourcefile,destfile,remote,options) {
-    var destdir = path.dirname(destfile);
-
-    console.log("*Download %s to %s", sourcefile, destfile);
-    try{ 
-      fs.statSync(destdir); 
-    } catch(e) {
-      try {
-        fs.mkdirSync(destdir,0777, true);
-      } catch(err){ throw err }
-      console.log("Created directory", destdir);
-    }
-
-    remote.key.get(sourcefile).on('result',function(ret,hdr){
-      console.log("Downloaded %s (%s bytes)", destfile, ret ? ret.length : 0);
-        try {
-          if(isBinary(sourcefile)){
-            fs.writeFileSync(destfile,new Buffer(ret,'base64').toString('binary'),'binary');
-          } else {
-            fs.writeFileSync(destfile,ret,'utf-8');
-          } 
-        } catch(err) { throw err }       
-    });   
-  }
 } /* end of process_store */
 
 

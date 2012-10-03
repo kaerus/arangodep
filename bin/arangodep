@@ -248,17 +248,17 @@ function process_store(argv) {
   }
 
 
-  processFiles(files,function(source,destination,remote,toLocal){
+  processFiles(files,function(source,dest,remote,toLocal){
     var data, destdir, destfile;
     if(toLocal) {
       try { 
-          stat = fs.statSync(destination);
+          stat = fs.statSync(dest);
           if(!stat.isDirectory())
             throw {message:"destination must be a directory", code:-2} 
         }
         catch(e){
-          try { fs.mkdirSync(destination,0777,true);
-            console.log("Created directory", destination); 
+          try { fs.mkdirSync(dest,0777,true);
+            console.log("Created directory", dest); 
           } catch(err) { throw err }  
       }   
       /* get list of files from remote */
@@ -266,7 +266,7 @@ function process_store(argv) {
         if(err) throw {message:ret,code:err}
         ret.forEach(function(sourcefile){
           /* destfile is same as sourcefile without remote basedir */
-          destfile = destination+sourcefile.replace(remote.basedir,'');
+          destfile = dest+sourcefile.replace(remote.basedir,'');
           try{ 
             fs.statSync(destfile); 
           } catch(e) {
@@ -278,24 +278,24 @@ function process_store(argv) {
               console.log("Created directory", destdir);
             }
           }
-          read_remote_write_local(remote,sourcefile,destfile);
+          read_remote_write_local(sourcefile,destfile,remote);
         });
       });
     } else {
       /* add remote basedir to destfile */
       if(remote.basedir)
-        destfile = remote.basedir + '/' + destination;
-      else destfile = destination;
+        destfile = remote.basedir + '/' + dest;
+      else destfile = dest;
 
       if(!(typeof options.expiry === 'object'))
           throw {message:"expiry date missing", code:-3}
   
-      read_local_write_remote(remote,source,destfile,options.expiry);  
+      read_local_write_remote(source,destfile,remote,options.expiry);  
     }  
 
   });    
 
-  function read_remote_write_local(remote,source,dest){
+  function read_remote_write_local(source,dest,remote){
     remote.key.get(source).on('result',function(ret,hdr){
       console.log("Downloaded %s (%s bytes)", dest, ret ? ret.length : 0);
       try {
@@ -308,7 +308,7 @@ function process_store(argv) {
     });  
   }
 
-  function read_local_write_remote(remote,source,dest,expiry) {
+  function read_local_write_remote(source,dest,remote,expiry) {
     try {
       data = fs.readFileSync(source);
     } catch(err) { throw err } 
@@ -355,14 +355,21 @@ function process_module(argv) {
   }
 
 
-  processFiles(files,function(source,destination,remote,toLocal){
+  processFiles(files,function(source,dest,remote,toLocal){
     
     if(toLocal) {
-      console.log("Download %s to %s", source, destination);
+      read_remote_write_local(source,dest,remote);
     } else {
-      console.log("Deploy %s to %s", source, destination);
-
+      read_local_write_remote(source,dest,remote);
     }
   });
+
+  function read_remote_write_local(source,dest,remote){
+    console.log("Download %s to %s", source, destinaation);
+  }
+
+  function read_local_write_remote(source,dest,remote){
+    console.log("Deploy %s to %s", source, destination);
+  }
   
 } /* end of process_module */

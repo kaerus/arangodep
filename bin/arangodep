@@ -70,12 +70,12 @@ program = path.basename(process.argv.shift());
 
 if(process.argv.length < 2) show_help();
 
-//try {
+try {
   deploy[process.argv[0]].command.call(null,process.argv);
-//} catch(e) {
-//  console.log("Error(%s):", e.code, e.message);
-//  process.exit(e.code);
-//}  
+} catch(e) {
+  console.log("Error(%s):", e.code, e.message ? e.message : e);
+  process.exit(e.code);
+}  
 
 function isBinary(file) {
   switch(path.extname(file)){

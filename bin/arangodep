@@ -371,7 +371,10 @@ function process_module(argv) {
         if(err) throw{message:"Modules not found: " + ret, code:err}
         if(ret.result) {
           ret.result.forEach(function(module){
-            remote_module_write_local(module,dest,remote);
+            /* note: path must start with basedir */
+            /* how is this done in arangodb ?     */
+            if(module.path.indexOf(remote.basedir) === 0)
+              remote_module_write_local(module,dest,remote);
           });
         } else console.log("No modules at ", remote.basedir);
       });

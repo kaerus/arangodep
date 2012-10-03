@@ -30,7 +30,8 @@ var arango = require('arango.client')
   , deploy = {
       store: {command: process_store, brief: "deploy files as key-values"},
       module: {command: process_module, brief: "deploy files as modules"}
-    }, program;
+    }, program
+  , PSEP = process.platform === 'win32' ? '\\' : '/';  
 
 
 function show_help() {
@@ -89,24 +90,23 @@ function isBinary(file) {
   return true;
 }
 
-function isremote(file) {
-  return file.match(/^(?:([A-Za-z]+):)/);
-}
-
-function traverseFiles(dir,callback,base){
+/* traverses directory structure         */
+/* and returns filepaths to handler      */
+/* basepath is without initial directory */
+/* todo: how to handle symlinks?         */
+function traverseFiles(dir,callback,subdir){
   var files = fs.readdirSync(dir), 
-      extname, filepath, basepath;
-  base = base || "";    
+      extname, realpath, basepath;    
   files.forEach(function(file){
     try {
-      filepath = dir+'/'+file;
-      basepath = base+'/'+file;
-      stat = fs.statSync(filepath);
+      realpath = subdir ? dir+PSEP+file : dir+file;
+      basepath = subdir ? subdir+PSEP+file : file;
+      stat = fs.statSync(realpath);
       /* traverse subdirs */
       if(stat.isDirectory()) {
-        readFiles(filepath,basepath);
+        traverseFiles(realpath,callback,basepath);
       } else if(stat.isFile()) {
-        callback(filepath,basepath);
+        callback(realpath,basepath);
       }  
     } catch(err) { throw err }    
   });    
@@ -115,13 +115,14 @@ function traverseFiles(dir,callback,base){
 /* reads connection url and returns connection */
 /* adds basedir to connection object */
 function arangoConnection(conn_url) {
-  var connection = new arango.Connection(conn_url);
+  var x, connection = new arango.Connection(conn_url);
   /* strip out collection name */
   x = connection.config.name.split(':');
-  connection.config.name = x[0];
-  /* keep basedir */
-  connection.basedir = x[1].replace(/^\//,'').replace(/\/$/,'');
-
+  if(x && x.length > 1) {
+    connection.config.name = x[0];
+    /* keep basedir & trim slashes */
+    connection.basedir = x[1].replace(/^\//,'').replace(/\/$/,'');
+  } 
   return connection;
 }
 
@@ -140,10 +141,12 @@ function processFiles(files,callback) {
   destination = files[0];
 
   /* determine if destination is local or remote */
-  if(isRemote(destination)) toLocal = false;
+  if(destination.match(/^(?:([A-Za-z]+):)/)) toLocal = false;
   else toLocal = true;
+  console.log("process destination:", destination);
 
-  sources.forEach(function(source){  
+  sources.forEach(function(source){ 
+    console.log("process source:",source); 
     if(toLocal) { 
       /* destination is local */
         try { 
@@ -174,8 +177,10 @@ function processFiles(files,callback) {
             callback(sourcefile,destfile,remote,toLocal);
           });
       } else {
-        /* todo: destfile */
-        callback(source,null,remote,toLocal);
+        /* destfile = sourcefile */
+        /* TODO: clean up path */
+        destination = source;
+        callback(source,destination,remote,toLocal);
       } 
     } 
   });
@@ -233,13 +238,14 @@ function process_store(argv) {
   });    
 
   function local_to_remote(sourcefile,destfile,remote,options) {
-    var bin, data, contentType = mime.lookup(source), md5, destpath;
+    var bin, data, contentType = mime.lookup(sourcefile), md5;
 
-    /* source and destfile paths */
-    destfile = destfile || sourcefile;
+    /* add remote basedir to destfile */
+    if(remote.basedir)
+      destfile = remote.basedir + '/' + destfile;
 
-    if(!remote.basedir) 
-        throw{message: "Destination basedir missing", code:-2}
+    console.log("*Deploy %s to %s", sourcefile, destfile);
+
     if(!(typeof options.expiry === 'object'))
         throw {message:"expiry date missing", code:-3}
 
@@ -249,19 +255,18 @@ function process_store(argv) {
 
     /* create md5 fingerprint for integrity checks */
     md5 = crypto.createHash('md5').update(data).digest('hex');  
-    destpath = remote.basedir+destfile.replace(/^\.\//,'');
-    bin = isBinary(source);
-    remote.key.put(destpath, {expires:options.expiry,extended:{contentType:contentType,md5:md5}},
+    bin = isBinary(sourcefile);
+    remote.key.put(destfile, {expires:options.expiry,extended:{contentType:contentType,md5:md5}},
               bin ? data.toString('base64') : data,function(err,ret){
                 if(err) throw {message:ret,code:err};
-                else console.log("Deployed %s (%s bytes) as %s file", destpath, data.length, bin ? 'binary' : 'text');  
-              }); 
+                else console.log("Deployed %s (%s bytes) as %s file", destfile, data.length, bin ? 'binary' : 'text');  
+              });           
   }
 
   function remote_to_local(sourcefile,destfile,remote,options) {
-    var destpath = destfile + '/' + sourcefile.substr(sourcefile.indexOf('/')+1) 
-        destdir = path.dirname(destpath);
+    var destdir = path.dirname(destfile);
 
+    console.log("*Download %s to %s", sourcefile, destfile);
     try{ 
       fs.statSync(destdir); 
     } catch(e) {
@@ -272,16 +277,15 @@ function process_store(argv) {
     }
 
     remote.key.get(sourcefile).on('result',function(ret,hdr){
-      console.log("Downloaded %s (%s bytes)", destpath, ret ? ret.length : 0);
+      console.log("Downloaded %s (%s bytes)", destfile, ret ? ret.length : 0);
         try {
           if(isBinary(sourcefile)){
-            fs.writeFileSync(destpath,new Buffer(ret,'base64').toString('binary'),'binary');
+            fs.writeFileSync(destfile,new Buffer(ret,'base64').toString('binary'),'binary');
           } else {
-            fs.writeFileSync(destpath,ret,'utf-8');
+            fs.writeFileSync(destfile,ret,'utf-8');
           } 
         } catch(err) { throw err }       
     });   
-
   }
 } /* end of process_store */
 

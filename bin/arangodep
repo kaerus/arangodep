@@ -129,6 +129,7 @@ function arangoConnection(conn_url) {
 /* processes files, determines source and destination */
 /* callback gets source + dest filepath,              */ 
 /* remote connection and toLocal flag                 */ 
+/* todo: needs some refactoring */
 function processFiles(files,callback) {
   var toLocal;
 
@@ -188,12 +189,8 @@ function processFiles(files,callback) {
 function process_store(argv) {
   var command = argv.shift()
     , options = {}
-    , files = []
-    , sources
-    , destination
-    , toLocal
-    , stat
-    , x;
+    , files = [];
+    
 
   function help() {
     console.log("Key-value store deployment");
@@ -296,12 +293,7 @@ function process_store(argv) {
 function process_module(argv) {
   var command = argv.shift()
     , options = {}
-    , files = []
-    , sources
-    , destination
-    , toLocal
-    , stat
-    , x;
+    , files = [];
 
   function help() {
     console.log("Module deployment");
@@ -330,7 +322,8 @@ function process_module(argv) {
       console.log("Download %s from %s", source, destination);
     } else {
       console.log("Deploy %s to %s", source, destination);
+
     }
   });
   
-}
+} /* end of process_module */

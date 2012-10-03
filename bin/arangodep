@@ -70,12 +70,12 @@ program = path.basename(process.argv.shift());
 
 if(process.argv.length < 2) show_help();
 
-try {
+//try {
   deploy[process.argv[0]].command.call(null,process.argv);
-} catch(e) {
-  console.log("Error(%s):", e.code, e.message);
-  process.exit(e.code);
-}  
+//} catch(e) {
+//  console.log("Error(%s):", e.code, e.message);
+//  process.exit(e.code);
+//}  
 
 function isBinary(file) {
   switch(path.extname(file)){
@@ -168,7 +168,7 @@ function processFiles(files,callback) {
           });
       } else {
         /* destfile = sourcefile */
-        destination = source;
+        destination = path.basename(source);
         callback(source,destination,remote,toLocal);
       } 
     } 
@@ -315,11 +315,8 @@ function process_store(argv) {
 
     remote.key.put(dest, { 
           expires:expiry,
-          extended:{
-              contentType: mime.lookup(source),
-              md5: crypto.createHash('md5').update(data).digest('hex')
-            }
-          }, isBinary(source) ? data.toString('base64') : data, function(err,ret) {
+          extended:{contentType: mime.lookup(source)}
+          }, isBinary(source) ? data.toString('base64') : data.toString(), function(err,ret) {
               if(err) throw {message:ret,code:err};
               else console.log("Deployed %s (%s bytes)", dest, data.length);  
     }); 
@@ -356,20 +353,87 @@ function process_module(argv) {
 
 
   processFiles(files,function(source,dest,remote,toLocal){
-    
+    var destfile;
+
     if(toLocal) {
-      read_remote_write_local(source,dest,remote);
+      try { 
+          stat = fs.statSync(dest);
+          if(!stat.isDirectory())
+            throw {message:"destination must be a directory", code:-2} 
+        }
+        catch(e){
+          try { fs.mkdirSync(dest,0777,true);
+            console.log("Created directory", dest); 
+          } catch(err) { throw err }  
+      }   
+      /* get list of files from remote */
+      remote.simple.list("_modules",{path:remote.basedir},function(err,ret){
+        if(err) throw{message:"Modules not found: " + ret, code:err}
+        if(ret.result) {
+          ret.result.forEach(function(module){
+            remote_module_write_local(module,dest,remote);
+          });
+        } else console.log("No modules at ", remote.basedir);
+      });
     } else {
-      read_local_write_remote(source,dest,remote);
+      /* add remote basedir to destfile */
+      if(remote.basedir)
+        destfile = remote.basedir + '/' + dest;
+      else destfile = dest;
+
+      read_local_write_remote(source,destfile,remote);
     }
   });
 
-  function read_remote_write_local(source,dest,remote){
-    console.log("Download %s to %s", source, destinaation);
+  function remote_module_write_local(module,dest,remote){
+    var destdir;
+
+    destfile = dest+module.path.replace(remote.basedir,'');
+    try{ 
+      fs.statSync(destfile); 
+    } catch(e) {
+      try {
+        destdir = path.dirname(destfile);
+        fs.statSync(destdir);
+      } catch(err){ 
+        fs.mkdirSync(destdir,0777, true);
+        console.log("Created directory", destdir);
+      }
+    }
+
+    try{
+      fs.writeFileSync(destfile,module.content,'utf-8');
+      console.log("Downloaded %s (%s bytes)", destfile, module.content.length);
+    } catch(err){ 
+        throw {message:"Failed to create file: "+ err.message, code:err.code}
+    }    
   }
 
   function read_local_write_remote(source,dest,remote){
-    console.log("Deploy %s to %s", source, destination);
+    if(isBinary(source)) 
+      throw{message:"Binary modules are not permitted",code:-5}
+
+    try {
+      data = fs.readFileSync(source).toString();
+    } catch(err) { throw err }
+
+    /* check if module exists */
+    remote.simple.first("_modules",{path:dest},function(err,ret){
+      if(err){
+        /* no module found */
+        remote.document.create("_modules",{path:dest,content:data},function(err,ret){
+          if(err) throw{message:"Failed to deploy module: "+ret,code:err};
+          else console.log("Deployed module %s to %s", source, dest); 
+        });
+      } else {
+        /* update existing */
+        remote.document.put(ret.document._id,{path:dest,content:data},function(err,ret){
+          if(err) throw{message:"Failed to update module: "+ret,code:err}
+          else console.log("Updated module %s to %s", source, dest);  
+        });
+      } 
+    });
+    
   }
   
 } /* end of process_module */

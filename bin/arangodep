@@ -36,7 +36,7 @@ var arango = require('arango.client')
 
 
 function show_help() {
-  console.log("Arango deployment tools v0.2 by Anders Elo <anders @ kaerus com>.");
+  console.log("Arango deployment tools v0.3.2 by Anders Elo <anders @ kaerus com>.");
   console.log("Commands:");
   Object.keys(deploy).forEach(function(command){
     console.log("%s:",command.pad(-16),deploy[command].brief)

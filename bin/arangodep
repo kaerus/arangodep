@@ -89,6 +89,98 @@ function isBinary(file) {
   return true;
 }
 
+function isremote(file) {
+  return file.match(/^(?:([A-Za-z]+):)/);
+}
+
+function traverseFiles(dir,callback,base){
+  var files = fs.readdirSync(dir), 
+      extname, filepath, basepath;
+  base = base || "";    
+  files.forEach(function(file){
+    try {
+      filepath = dir+'/'+file;
+      basepath = base+'/'+file;
+      stat = fs.statSync(filepath);
+      /* traverse subdirs */
+      if(stat.isDirectory()) {
+        readFiles(filepath,basepath);
+      } else if(stat.isFile()) {
+        callback(filepath,basepath);
+      }  
+    } catch(err) { throw err }    
+  });    
+}
+
+/* reads connection url and returns connection */
+/* adds basedir to connection object */
+function arangoConnection(conn_url) {
+  var connection = new arango.Connection(conn_url);
+  /* strip out collection name */
+  x = connection.config.name.split(':');
+  connection.config.name = x[0];
+  /* keep basedir */
+  connection.basedir = x[1].replace(/^\//,'').replace(/\/$/,'');
+
+  return connection;
+}
+
+/* processes files, determines source and destination */
+/* callback gets source + dest filepath,              */ 
+/* remote connection and toLocal flag                 */ 
+function processFiles(files,callback) {
+  var toLocal;
+
+  /* TODO: ability to read from stdin and write to stdout */
+  if(files.length < 2)
+    throw {message: "source and destination required", code: -1};
+
+  /* get sources & destination */
+  sources = files.splice(0,files.length-1);
+  destination = files[0];
+
+  /* determine if destination is local or remote */
+  if(isRemote(destination)) toLocal = false;
+  else toLocal = true;
+
+  sources.forEach(function(source){  
+    if(toLocal) { 
+      /* destination is local */
+        try { 
+          stat = fs.statSync(destination);
+          if(!stat.isDirectory())
+            throw {message:"destination must be a directory", code:-2} 
+        }
+        catch(e){
+          try { fs.mkdirSync(destination,0777,true);
+            console.log("Created directory", destination); 
+          } catch(err) { throw err }  
+        }   
+      try {
+        var remote = arangoConnection(source); 
+      } catch (err) {
+        throw {message:'source invalid or unavailable', code:-3 }
+      }     
+      callback(source,destination,remote,toLocal);
+    } else {   
+      /* destination is remote */
+      var remote = arangoConnection(destination); 
+      try { 
+          stat = fs.statSync(source); 
+        } catch(err){ throw {message:"source invalid " + err.message,code:err.code} }   
+      if(stat.isDirectory()){
+          /* upload entire directory & subdirs */
+          traverseFiles(source,function(sourcefile,destfile){
+            callback(sourcefile,destfile,remote,toLocal);
+          });
+      } else {
+        /* todo: destfile */
+        callback(source,null,remote,toLocal);
+      } 
+    } 
+  });
+}
+
 /* Handles deployment to/from the arangodb key-value store */
 function process_store(argv) {
   var command = argv.shift()
@@ -101,6 +193,7 @@ function process_store(argv) {
     , x;
 
   function help() {
+    console.log("Key-value store deployment");
     console.log("Command:", program + ' ' + command + " <options> <sources> <destination>");
     console.log("Options:");
     console.log("-h --help".pad(16),"Shows this help" );
@@ -125,88 +218,25 @@ function process_store(argv) {
     }
   }
 
-  if(files.length < 2)
-    throw {message: "source and destination required", code: -1};
 
-  /* get sources & destination */
-  sources = files.splice(0,files.length-1);
-  destination = files[0];
-
-  /* determine if destination is local or remote */
-  if(destination.match(/^(?:([A-Za-z]+):)/)) toLocal = false;
-  else toLocal = true;
-
-  /* process sources */
-  sources.forEach(function(source){  
-    if(toLocal) { 
-      /* destination is local */
-        try { 
-          stat = fs.statSync(destination);
-          if(!stat.isDirectory())
-            throw {message:"destination must be a directory", code:-2} 
-        }
-        catch(e){
-          try { fs.mkdirSync(destination,0777,true);
-            console.log("Created directory", destination); 
-          } catch(err) { throw err }  
-        }   
-      try {
-        source = new arango.Connection(source);
-        /* strip out collection name */
-        x = source.config.name.split(':');
-        source.config.name = x[0];
-        /* keep basedir */
-        source.basedir = x[1].replace(/^\//,'').replace(/\/$/,'');
-      } catch (err) {
-        throw {message:'source invalid or unavailable', code:-3 }
-      }     
-
-      source.key.list(source.basedir,function(err,ret){
+  processFiles(files,function(source,destination,remote,toLocal){
+    if(toLocal) {
+      remote.key.list(remote.basedir,function(err,ret){
         if(err) throw {message:ret,code:err}
-        ret.forEach(function(file){
-          remote_to_local(source,file,destination,options);
+        ret.forEach(function(sourcefile){
+          remote_to_local(sourcefile,destination,remote,options);
         });  
       });
-    } else {   
-      /* destination is remote */
-      destination = new arango.Connection(destination);
-      /* strip out collection name */
-      x = destination.config.name.split(':');
-      destination.config.name = x[0];
-      /* keep basedir */
-      destination.basedir = x[1].replace(/^\//,'').replace(/\/$/,'');  
-      try { 
-          stat = fs.statSync(source); 
-        } catch(err){ throw {message:"source invalid " + err.message,code:err.code} }   
-      if(stat.isDirectory()){
-        /* upload entire directory & subdirs */
-        var readFiles = function(dir,base) {
-          var files = fs.readdirSync(dir), extname;
-          files.forEach(function(file){
-            try {
-             var filepath = dir+'/'+file
-               , basepath = base+'/'+file;
-              stat = fs.statSync(filepath);
-              /* subdirs */
-              if(stat.isDirectory()) {
-                //file_list.paths.push(basepath);
-                readFiles(filepath,basepath);
-              } else if(stat.isFile()) {
-                local_to_remote(filepath,basepath,destination,options);
-              }  
-            } catch(err) { throw err }    
-          });  
-        } // readFiles()
-          readFiles(source,"");
-      } else {
-        local_to_remote(source,source,destination,options);
-      } 
-    } 
+    } else {
+      local_to_remote(source,destination,remote,options);
+    }  
+  });    
 
-  });
-  
-  function local_to_remote(source,dest,remote,options) {
-    var bin, data, contentType = mime.lookup(source), md5, destdir;
+  function local_to_remote(sourcefile,destfile,remote,options) {
+    var bin, data, contentType = mime.lookup(source), md5, destpath;
+
+    /* source and destfile paths */
+    destfile = destfile || sourcefile;
 
     if(!remote.basedir) 
         throw{message: "Destination basedir missing", code:-2}
@@ -214,25 +244,24 @@ function process_store(argv) {
         throw {message:"expiry date missing", code:-3}
 
     try {
-      data = fs.readFileSync(source);
+      data = fs.readFileSync(sourcefile);
     } catch(err) { throw err } 
 
-    /* create md5 fingerprint */
+    /* create md5 fingerprint for integrity checks */
     md5 = crypto.createHash('md5').update(data).digest('hex');  
-    destdir = remote.basedir+dest.replace(/^\.\//,'');
+    destpath = remote.basedir+destfile.replace(/^\.\//,'');
     bin = isBinary(source);
-    remote.key.put(destdir, {expires:options.expiry,extended:{contentType:contentType,md5:md5}},
+    remote.key.put(destpath, {expires:options.expiry,extended:{contentType:contentType,md5:md5}},
               bin ? data.toString('base64') : data,function(err,ret){
                 if(err) throw {message:ret,code:err};
-                else console.log("Deployed %s (%s bytes) as %s file", destdir, data.length, bin ? 'binary' : 'text');  
+                else console.log("Deployed %s (%s bytes) as %s file", destpath, data.length, bin ? 'binary' : 'text');  
               }); 
   }
 
-  function remote_to_local(remote,source,dest,options) {
-    /* note: this assumes we have remote basedir */
-    var bin, destdir, destfile = dest + '/' + source.substr(source.indexOf('/')+1);  
+  function remote_to_local(sourcefile,destfile,remote,options) {
+    var destpath = destfile + '/' + sourcefile.substr(sourcefile.indexOf('/')+1) 
+        destdir = path.dirname(destpath);
 
-    destdir = path.dirname(destfile);
     try{ 
       fs.statSync(destdir); 
     } catch(e) {
@@ -242,13 +271,13 @@ function process_store(argv) {
       console.log("Created directory", destdir);
     }
 
-    remote.key.get(source).on('result',function(ret,hdr){
-      console.log("Downloaded %s (%s bytes)", destfile, ret ? ret.length : 0);
+    remote.key.get(sourcefile).on('result',function(ret,hdr){
+      console.log("Downloaded %s (%s bytes)", destpath, ret ? ret.length : 0);
         try {
-          if(isBinary(source)){
-            fs.writeFileSync(destfile,new Buffer(ret,'base64').toString('binary'),'binary');
+          if(isBinary(sourcefile)){
+            fs.writeFileSync(destpath,new Buffer(ret,'base64').toString('binary'),'binary');
           } else {
-            fs.writeFileSync(destfile,ret,'utf-8');
+            fs.writeFileSync(destpath,ret,'utf-8');
           } 
         } catch(err) { throw err }       
     });   
@@ -256,6 +285,47 @@ function process_store(argv) {
   }
 } /* end of process_store */
 
-function process_module(argv) {
 
+
+/* handles deployment of arangodb modules */
+function process_module(argv) {
+  var command = argv.shift()
+    , options = {}
+    , files = []
+    , sources
+    , destination
+    , toLocal
+    , stat
+    , x;
+
+  function help() {
+    console.log("Module deployment");
+    console.log("Command:", program + ' ' + command + " <options> <sources> <destination>");
+    console.log("Options:");
+    console.log("-h --help".pad(16),"Shows this help" );
+    process.exit(0);
+  }
+
+  for(i = 0; i < argv.length; i++) {
+    switch(argv[i]) {
+      case '-h':
+      case '--help':
+        help();
+        break;
+      default:
+        files.push(argv[i]);
+        break;
+    }
+  }
+
+
+  processFiles(files,function(source,destination,remote,toLocal){
+    
+    if(toLocal) {
+      console.log("Download %s from %s", source, destination);
+    } else {
+      console.log("Deploy %s to %s", source, destination);
+    }
+  });
+  
 }

@@ -22,7 +22,6 @@
  */
 
 var arango = require('arango.client')
-  , crypto = require('crypto')
   , util = require('util')
   , mime = require('mime')
   , path = require('path')
@@ -30,18 +29,19 @@ var arango = require('arango.client')
   , deploy = {
       store: {command: process_store, brief: "deploy files as key-values"},
       module: {command: process_module, brief: "deploy files as modules"},
-      dummy: {command: process_dummy, brief: "dummy process"}
-    }, program
+      route: {command: process_route, brief: "manipulates routing"},
+      dummy: {command: process_dummy, brief: "crash test dummy"}
+    }, program, error
   , PSEP = process.platform === 'win32' ? '\\' : '/';  
 
 
-function show_help() {
+function help() {
   console.log("Arango deployment tools v0.3.2 by Anders Elo <anders @ kaerus com>.");
   console.log("Commands:");
   Object.keys(deploy).forEach(function(command){
     console.log("%s:",command.pad(-16),deploy[command].brief)
   });
-  console.log("type: 'arangodep <command> --help' for more information.");
+  console.log("type 'arangodep <command> --help' for more information.");
   process.exit(0);
 }  
 
@@ -65,17 +65,21 @@ String.prototype.pad = function(justify,chr) {
   return str.join('');
 }
 
+function error(msg,code) {
+  console.error("Error:", msg);
+  process.exit(code||-1);
+}
+
 process.argv.shift(); 
 program = path.basename(process.argv.shift()); 
 
-if(process.argv.length < 2) show_help();
+if(process.argv.length < 2) help();
 
 try {
   deploy[process.argv[0]].command.call(null,process.argv);
-} catch(e) {
-  console.log("Error(%s):", e.code, e.message ? e.message : e);
-  process.exit(e.code);
-}  
+} catch(err) {
+  help();
+} 
 
 function isBinary(file) {
   switch(path.extname(file)){
@@ -109,7 +113,7 @@ function traverseFiles(dir,callback,subdir){
       } else if(stat.isFile()) {
         callback(realpath,basepath);
       }  
-    } catch(err) { throw err }    
+    } catch(err) { error("Failed to read file or directory:", err.message ) }    
   });    
 }
 
@@ -136,7 +140,7 @@ function processFiles(files,callback) {
 
   /* TODO: ability to read from stdin and write to stdout */
   if(files.length < 2)
-    throw {message: "source and destination required", code: -1};
+    error("source and destination required");
 
   /* get sources & destination */
   sources = files.splice(0,files.length-1);
@@ -152,7 +156,7 @@ function processFiles(files,callback) {
       try {
         var remote = arangoConnection(source); 
       } catch (err) {
-        throw {message:'source invalid or unavailable', code:-3 }
+        error("source invalid or unavailable");
       }     
       callback(source,destination,remote,toLocal);
     } else {   
@@ -160,7 +164,7 @@ function processFiles(files,callback) {
       var remote = arangoConnection(destination); 
       try { 
           stat = fs.statSync(source); 
-        } catch(err){ throw {message:"source invalid " + err.message,code:err.code} }   
+        } catch(err){ error("source invalid " + err.message) }   
       if(stat.isDirectory()){
           /* upload entire directory & subdirs */
           traverseFiles(source,function(sourcefile,destfile){
@@ -212,7 +216,7 @@ function process_dummy(argv) {
     }
   });
   
-} /* end of process_anything */
+} /* end of process_dummy */
 
 /* Handles deployment to/from the arangodb key-value store */
 function process_store(argv) {
@@ -254,16 +258,16 @@ function process_store(argv) {
       try { 
           stat = fs.statSync(dest);
           if(!stat.isDirectory())
-            throw {message:"destination must be a directory", code:-2} 
+            throw error("destination must be a directory"); 
         }
         catch(e){
           try { fs.mkdirSync(dest,0777,true);
             console.log("Created directory", dest); 
-          } catch(err) { throw err }  
+          } catch(err) { error("Failed to make directory:", err.message) }  
       }   
       /* get list of files from remote */
       remote.key.list(remote.basedir,function(err,ret){
-        if(err) throw {message:ret,code:err}
+        if(err) error("Failed list files: " + ret);
         ret.forEach(function(sourcefile){
           /* destfile is same as sourcefile without remote basedir */
           destfile = dest+sourcefile.replace(remote.basedir,'');
@@ -288,7 +292,7 @@ function process_store(argv) {
       else destfile = dest;
 
       if(!(typeof options.expiry === 'object'))
-          throw {message:"expiry date missing", code:-3}
+        error("expiry date missing");
   
       read_local_write_remote(source,destfile,remote,options.expiry);  
     }  
@@ -304,20 +308,20 @@ function process_store(argv) {
         } else {
           fs.writeFileSync(dest,ret,'utf-8');
         } 
-      } catch(err) { throw err }
+      } catch(err) { error("Failed to write file:", err.message) }
     });  
   }
 
   function read_local_write_remote(source,dest,remote,expiry) {
     try {
       data = fs.readFileSync(source);
-    } catch(err) { throw err } 
+    } catch(err) { error("Failed to read file:", err.message) } 
 
     remote.key.put(dest, { 
           expires:expiry,
           extended:{contentType: mime.lookup(source)}
           }, isBinary(source) ? data.toString('base64') : data.toString(), function(err,ret) {
-              if(err) throw {message:ret,code:err};
+              if(err) error("Failed to update: " + ret);
               else console.log("Deployed %s (%s bytes)", dest, data.length);  
     }); 
   }
@@ -359,16 +363,16 @@ function process_module(argv) {
       try { 
           stat = fs.statSync(dest);
           if(!stat.isDirectory())
-            throw {message:"destination must be a directory", code:-2} 
+            throw error("destination must be a directory"); 
         }
         catch(e){
           try { fs.mkdirSync(dest,0777,true);
             console.log("Created directory", dest); 
-          } catch(err) { throw err }  
+          } catch(err) { error("Failed to make directory:", err.message) }  
       }   
       /* get list of files from remote */
       remote.simple.list("_modules",{path:remote.basedir},function(err,ret){
-        if(err) throw{message:"Modules not found: " + ret, code:err}
+        if(err) error("Modules not found: " + ret);
         if(ret.result) {
           ret.result.forEach(function(module){
             /* note: path must start with basedir */
@@ -408,30 +412,30 @@ function process_module(argv) {
       fs.writeFileSync(destfile,module.content,'utf-8');
       console.log("Downloaded %s (%s bytes)", destfile, module.content.length);
     } catch(err){ 
-        throw {message:"Failed to create file: "+ err.message, code:err.code}
+        error("Failed to create file: " + err.message);
     }    
   }
 
   function read_local_write_remote(source,dest,remote){
     if(isBinary(source)) 
-      throw{message:"Binary modules are not permitted",code:-5}
+      error("Binary modules are not permitted");
 
     try {
       data = fs.readFileSync(source).toString();
-    } catch(err) { throw err }
+    } catch(err) { error("Failed to read file:",err.message); }
 
     /* check if module exists */
     remote.simple.first("_modules",{path:dest},function(err,ret){
       if(err){
         /* no module found */
         remote.document.create("_modules",{path:dest,content:data},function(err,ret){
-          if(err) throw{message:"Failed to deploy module: "+ret,code:err};
+          if(err) error("Failed to deploy module: " + ret);
           else console.log("Deployed module %s to %s", source, dest); 
         });
       } else {
         /* update existing */
         remote.document.put(ret.document._id,{path:dest,content:data},function(err,ret){
-          if(err) throw{message:"Failed to update module: "+ret,code:err}
+          if(err) error("Failed to update module: " + ret);
           else console.log("Updated module %s to %s", source, dest);  
         });
       } 
@@ -440,3 +444,136 @@ function process_module(argv) {
   }
   
 } /* end of process_module */
+
+/* dummy deploy process for testing purposes */
+function process_route(argv) {
+  var command = argv.shift()
+    , options = {}
+    , files = []
+    , remote, updated;
+
+  function help() {
+    console.log("Deploy action routing");
+    console.log("Command:", program + ' ' + command + " <options> <server>");
+    console.log("Options:");
+    console.log("-h --help".pad(16),"Shows this help" );
+    console.log("-u --url".pad(16),"Url to match");
+    console.log("-a --action".pad(16),"Action controller");
+    console.log("-c --constraint".pad(16),"Url constraints");
+    console.log("-l --list".pad(16),"List routes");
+    console.log("-i --id".pad(16),"Route id");
+    console.log("-r --remove".pad(16),"Remove route");
+    process.exit(0);
+  }
+
+  for(i = 0; i < argv.length; i++) {
+    switch(argv[i]) {
+      case '-h':
+      case '--help':
+        help();
+        break;
+      case '-u':
+      case '--url':
+        options.url = argv[++i];
+        break;
+      case '-a':
+      case '--action':
+        options.action = argv[++i];
+        break;
+      case '-c':
+      case '--constraint':
+        options.constraint = argv[++i];
+        break;      
+      case '-r':
+      case '--remove':
+        options.remove = true;
+        break;  
+      case '-l':
+      case '--list':
+        options.list = true;
+        break;  
+      case '-i':
+      case '--id':
+        options.id = argv[++i];
+        break;  
+      default:
+        files.push(argv[i]);
+        break;
+    }
+  }
+
+  remote = new arango.Connection(files[files.length-1]);
+  if(options.id){
+    remote.document.get(options.id,function(err,route){
+      if(err) error("Route not found: " + route);
+      add_route(remote,options,route);  
+    });
+  } else {
+    remote.simple.list("_routing",{url:true},function(err,ret){
+      if(err) error("List routing failed:" + ret);
+      if(ret.result){
+        ret.result.forEach(function(route){
+          if(route.url == options.url || route.url.match === options.url) {
+            if(!options.list) {
+              add_route(remote,options,route);
+            } else {
+              console.log(route);
+            }  
+            updated = true;
+          } 
+        });
+        if(!updated&&!options.remove){
+          if(!options.list) {
+            add_route(remote,options,null);
+          } else {
+            console.log(ret.result);
+          }  
+        }
+      }
+    });
+  }     
+  
+
+  function add_route(remote,options,route){
+    if(!route) {
+      if(!options.url) error("Missing --url option");
+      if(!options.action) error("Missing --action option");
+    }
+
+    /* merge route data */
+    var doc = {url:options.url||route.url,action:options.action||route.action};
+
+    if(options.constraint){
+      if(typeof doc.url === 'string')
+        doc.url = {match:doc.url,constraint:options.constraint};
+      else 
+        doc.url.constraint = options.constraint;
+    }
+
+    if(options.do) {
+      if(typeof doc.action === 'string')
+        doc.action = {controller:doc.action,do:options.do};
+      else 
+        doc.action.do = options.do;
+    }
+
+    if(!route && !options.remove) {
+      remote.document.create("_routing",doc,function(err,ret){
+        if(err) error("Failed to create route:" + ret);
+        console.log("Route added: ", doc);  
+      });
+    } else {
+      if(!options.remove){
+        remote.document.put(route._id,doc,function(err,ret){
+          if(err) error("Failed to update route: " + ret);
+          console.log("Route updated: ", doc);  
+        });
+      } else {
+        remote.document.delete(route._id,function(err,ret){
+          if(err) error("Failed to remove route: " + ret);
+          console.log("Route deleted: ", route);  
+        });
+      }
+    }  
+  }
+} /* end of process_route */

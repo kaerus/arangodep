@@ -242,45 +242,52 @@ function process_store(argv) {
               console.log("Created directory", destdir);
             }
           }
-
-          remote.key.get(sourcefile).on('result',function(ret,hdr){
-            console.log("Downloaded %s (%s bytes)", destfile, ret ? ret.length : 0);
-            try {
-              if(isBinary(sourcefile)){
-                fs.writeFileSync(destfile,new Buffer(ret,'base64').toString('binary'),'binary');
-              } else {
-                fs.writeFileSync(destfile,ret,'utf-8');
-              } 
-            } catch(err) { throw err }
-          });  
+          read_remote_write_local(remote,sourcefile,destfile);
         });
       });
     } else {
       /* add remote basedir to destfile */
       if(remote.basedir)
-        destfile = remote.basedir + '/' + destfile;
+        destfile = remote.basedir + '/' + destination;
+      else destfile = destination;
 
       if(!(typeof options.expiry === 'object'))
           throw {message:"expiry date missing", code:-3}
-
-      try {
-        data = fs.readFileSync(sourcefile);
-      } catch(err) { throw err } 
   
-      remote.key.put(destfile, { 
-          expires:options.expiry,
-          extended:{
-              contentType: mime.lookup(sourcefile),
-              md5: crypto.createHash('md5').update(data).digest('hex')
-            }
-          }, isBinary(sourcefile) ? data.toString('base64') : data, function(err,ret) {
-              if(err) throw {message:ret,code:err};
-              else console.log("Deployed %s (%s bytes)", destfile, data.length);  
-      });   
+      read_local_write_remote(remote,source,destfile,options.expiry);  
     }  
 
   });    
 
+  function read_remote_write_local(remote,source,dest){
+    remote.key.get(source).on('result',function(ret,hdr){
+      console.log("Downloaded %s (%s bytes)", dest, ret ? ret.length : 0);
+      try {
+        if(isBinary(source)){
+          fs.writeFileSync(dest,new Buffer(ret,'base64').toString('binary'),'binary');
+        } else {
+          fs.writeFileSync(dest,ret,'utf-8');
+        } 
+      } catch(err) { throw err }
+    });  
+  }
+
+  function read_local_write_remote(remote,source,dest,expiry) {
+    try {
+      data = fs.readFileSync(source);
+    } catch(err) { throw err } 
+
+    remote.key.put(dest, { 
+          expires:expiry,
+          extended:{
+              contentType: mime.lookup(source),
+              md5: crypto.createHash('md5').update(data).digest('hex')
+            }
+          }, isBinary(source) ? data.toString('base64') : data, function(err,ret) {
+              if(err) throw {message:ret,code:err};
+              else console.log("Deployed %s (%s bytes)", destfile, data.length);  
+    }); 
+  }
 } /* end of process_store */
 
 

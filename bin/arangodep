@@ -375,7 +375,9 @@ function process_module(argv) {
     console.log("Options:");
     console.log("-h --help".pad(16),"Shows this help" );
     console.log("-p --path".pad(16),"Module path");
+    console.log("-i --id".pad(16),"Module id");
     console.log("-l --list".pad(16),"List modules");
+    console.log("-v --view".pad(16),"View module");
     console.log("-s --search".pad(16),"Search modules");
     console.log("-d --delete".pad(16),"Delete module");
     process.exit(0);
@@ -391,6 +393,10 @@ function process_module(argv) {
       case '--path':
         options.path = argv[++i];
         break;  
+      case '-i':
+      case '--id':
+        options.id = argv[++i];
+        break;  
       case '-l':
       case '--list':
         options.list = true;
@@ -402,7 +408,11 @@ function process_module(argv) {
       case '-d':
       case '-delete':
         options.remove = true;
-        break;       
+        break;    
+      case '-v':
+      case '--view':
+        options.view = true;
+        break;     
       default:
         files.push(argv[i]);
         break;
@@ -433,19 +443,26 @@ function process_module(argv) {
         remote.simple.list("_modules",{path:remote.basedir},function(err,ret){
           if(err) error("Modules not found" + ret);
           ret.result.forEach(function(module){
-            print_module_if(module,remote.basedir,options.path);   
+            print_module_if(module,remote.basedir,options.path,options.view);   
           });
         });  
       } else if (options.remove) {
-        if(!options.path)
-            error("Module path option missing");
-        remote.simple.first("_modules",{path:options.path},function(err,ret){
-          if(err) error("Failed to delete " + options.path + ": " + ret);
-          remote.document.delete(ret.document._id,function(err,ret){
-            if(err) error("Failed to delete " + options.path + ": " + ret);
-            console.log("Deleted module " + options.path);
+        if(!options.path && !options.id)
+          error("Module path or id missing");
+        if(options.id){
+          remote.document.delete(options.id,function(err,ret){
+            if(err) error("Failed to delete " + options.id + ": " + ret);
+            console.log("Deleted module " + options.id);
           });
-        });
+        } else {
+          remote.simple.first("_modules",{path:options.path},function(err,ret){
+            if(err) error("Failed to delete " + options.path + ": " + ret);
+            remote.document.delete(ret.document._id,function(err,ret){
+              if(err) error("Failed to delete " + options.path + ": " + ret);
+              console.log("Deleted module " + options.path);
+            });
+          });
+        }  
       } else {
         if(remote.basedir)
           destfile = remote.basedir + '/' + dest;
@@ -455,12 +472,12 @@ function process_module(argv) {
     }
   });
 
-  function print_module_if(module,match,search){
+  function print_module_if(module,match,search,details){
     var content = module.content;
     delete module.content;
     if((!match && !search) || module.path.indexOf(match) === 0 || search && module.path.indexOf(search) >= 0) {
-      console.log("//%j", module);
-      console.log(content);
+      console.log("%j", module);
+      if(details) console.log(content);
     }
   }
 

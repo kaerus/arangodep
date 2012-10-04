@@ -66,7 +66,7 @@ String.prototype.pad = function(justify,chr) {
 }
 
 function error(msg,code) {
-  console.error("Error:", msg);
+  console.error(msg);
   process.exit(code||-1);
 }
 
@@ -127,6 +127,8 @@ function arangoConnection(conn_url) {
     connection.config.name = x[0];
     /* keep basedir & trim slashes */
     connection.basedir = x[1].replace(/^\//,'').replace(/\/$/,'');
+    if(path.extname(connection.basedir))
+      connection.basedir = path.dirname(connection.basedir);
   } 
   return connection;
 }

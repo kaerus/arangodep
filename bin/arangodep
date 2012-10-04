@@ -333,8 +333,10 @@ function process_module(argv) {
     console.log("Command:", program + ' ' + command + " <options> <sources> <destination>");
     console.log("Options:");
     console.log("-h --help".pad(16),"Shows this help" );
+    console.log("-p --path".pad(16),"Module path");
     console.log("-l --list".pad(16),"List modules");
     console.log("-s --search".pad(16),"Search modules");
+    console.log("-d --delete".pad(16),"Delete module");
     process.exit(0);
   }
 
@@ -344,18 +346,22 @@ function process_module(argv) {
       case '--help':
         help();
         break;
+      case '-p':
+      case '--path':
+        options.path = argv[++i];
+        break;  
       case '-l':
       case '--list':
         options.list = true;
         break; 
       case '-s':
       case '--search':
-        options.search = argv[++i];
+        options.search = true;
         break;  
       case '-d':
       case '-delete':
         options.remove = true;
-        break;     
+        break;       
       default:
         files.push(argv[i]);
         break;
@@ -368,14 +374,14 @@ function process_module(argv) {
 
     if(toLocal) {  
       /* get list of files from remote */
-      remote.simple.list("_modules",{path:remote.basedir},function(err,ret){
+      remote.simple.list("_modules",{path:remote.basedir||options.path},function(err,ret){
         if(err) error("Modules not found: " + ret);
         if(ret.result) {
           ret.result.forEach(function(module){
             /* note: path must start with basedir */
             /* how is this done in arangodb ?     */
-              if(module.path.indexOf(remote.basedir) === 0 || 
-                (options.search && module.path.indexOf(options.search) >=0 )) {
+              if(module.path.indexOf(remote.basedir||options.path) === 0 || 
+                (options.search && module.path.indexOf(options.path) >=0 )) {
                 remote_module_write_local(module,dest,remote);
               }  
           });
@@ -387,9 +393,19 @@ function process_module(argv) {
         remote.simple.list("_modules",{path:remote.basedir},function(err,ret){
           if(err) error("Modules not found" + ret);
           ret.result.forEach(function(module){
-            print_module_if(module,remote.basedir,options.search);   
+            print_module_if(module,remote.basedir,options.path);   
           });
         });  
+      } else if (options.remove) {
+        if(!options.path)
+            error("Module path option missing");
+        remote.simple.first("_modules",{path:options.path},function(err,ret){
+          if(err) error("Failed to delete " + options.path + ": " + ret);
+          remote.document.delete(ret.document._id,function(err,ret){
+            if(err) error("Failed to delete " + options.path + ": " + ret);
+            console.log("Deleted module " + options.path);
+          });
+        });
       } else {
         if(remote.basedir)
           destfile = remote.basedir + '/' + dest;

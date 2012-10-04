@@ -78,7 +78,7 @@ if(process.argv.length < 2) help();
 try {
   deploy[process.argv[0]].command.call(null,process.argv);
 } catch(err) {
-  help();
+  error(err);
 } 
 
 function isBinary(file) {
@@ -125,10 +125,10 @@ function arangoConnection(conn_url) {
   x = connection.config.name.split(':');
   if(x && x.length > 1) {
     connection.config.name = x[0];
-    /* keep basedir & trim slashes */
-    connection.basedir = x[1].replace(/^\//,'').replace(/\/$/,'');
-    if(path.extname(connection.basedir))
+    connection.basedir = x[1];
+    if(path.extname(connection.basedir)) {
       connection.basedir = path.dirname(connection.basedir);
+    }  
   } 
   return connection;
 }
@@ -138,19 +138,23 @@ function arangoConnection(conn_url) {
 /* remote connection and toLocal flag                 */ 
 /* todo: needs some refactoring */
 function processFiles(files,callback) {
-  var toLocal, remote;
+  var toLocal = true, remote;
 
   /* get sources & destination */
   sources = files.splice(0,files.length-1);
   destination = files[0];
 
   /* determine if destination is local or remote */
-  if(destination.match(/^(?:([A-Za-z]+):)/)){
+  if(destination) {
+    if(destination.match(/^(?:([A-Za-z]+):)/)){
+      toLocal = false;
+      remote = arangoConnection(destination); 
+    }   
+  } else {
+    remote = arangoConnection();
     toLocal = false;
-    remote = arangoConnection(destination); 
   }  
-  else toLocal = true;
- 
+
   sources.forEach(function(source){ 
     if(toLocal) { 
       /* destination is local */
@@ -160,13 +164,12 @@ function processFiles(files,callback) {
         error("source invalid or unavailable");
       }     
       callback(source,destination,remote,toLocal);
-    } else {   
+    } else { 
       /* destination is remote */
       try { 
         stat = fs.statSync(source); 
       } catch(err){ error("source invalid " + err.message) }   
       if(stat.isDirectory()){
-        /* upload entire directory & subdirs */
         traverseFiles(source,function(sourcefile,destfile){
           callback(sourcefile,destfile,remote,toLocal);
         });
@@ -232,8 +235,11 @@ function process_store(argv) {
     console.log("Key-value store deployment");
     console.log("Command:", program + ' ' + command + " <options> <sources> <destination>");
     console.log("Options:");
-    console.log("-h --help".pad(16),"Shows this help" );
+    console.log("-h --help".pad(16),"Shows this help"); 
+    console.log("-p --path".pad(16),"Files path");
     console.log("-e --expiry".pad(16),"Set Expiry date 'yyyy-mm-dd HH:MM:SS'");
+    console.log("-l --list".pad(16),"List files");
+    console.log("-d --delete".pad(16),"Delete files");
     process.exit(0);
   }
 
@@ -248,12 +254,27 @@ function process_store(argv) {
         options.expiry = new Date(Date.parse(argv[++i],"yyyy-MM-dd HH:MM:SS")); 
         console.log("Epiry date: ", options.expiry.toString()); 
         break;  
+      case '-l':
+      case '--list':
+        options.list = true;
+        break;
+      case '-v':
+      case '--view':
+        options.view = true;
+        break;  
+      case '-p':
+      case '--path':
+        options.path = argv[++i];
+        break;    
+      case '-d':
+      case '--delete':
+        options.remove = true;
+        break;  
       default:
         files.push(argv[i]);
         break;
     }
   }
-
 
   processFiles(files,function(source,dest,remote,toLocal){
     var data, destdir, destfile;
@@ -279,17 +300,37 @@ function process_store(argv) {
         });
       });
     } else {
-      /* add remote basedir to destfile */
-      if(remote.basedir)
-        destfile = remote.basedir + '/' + dest;
-      else destfile = dest;
+      if(options.list || options.remove){
+        if(!remote.basedir && !options.path) error("Option path missing");
+        remote.key.list(remote.basedir,function(err,ret){
+          if(err) error("Failed to list files: " + ret);
+          ret.forEach(function(file){
+            if(options.view){
+              remote.key.get(file,function(err,ret,hdr){
+                if(err) error("Failed to get " + file + " :" + ret);
+                console.log(hdr);
+                console.log(ret);
+              });
+            } else if(options.remove) {
+              remote.key.delete(file,function(err,ret){
+                if(err) error("Failed to remove " + file + " :" + ret);
+                console.log("Deleted " + file);
+              });
+            } else console.log(ret);  
+          });
+        });
+      } else {  
+        /* add remote basedir to destfile */
+        if(remote.basedir)
+          destfile = remote.basedir + '/' + dest;
+        else destfile = dest;
 
-      if(!(typeof options.expiry === 'object'))
-        error("expiry date missing");
-  
-      read_local_write_remote(source,destfile,remote,options.expiry);  
+        if(!(typeof options.expiry === 'object'))
+          error("expiry date missing");
+    
+        read_local_write_remote(source,destfile,remote,options.expiry);  
+      }
     }  
-
   });    
 
   function read_remote_write_local(source,dest,remote){
@@ -367,7 +408,6 @@ function process_module(argv) {
         break;
     }
   }
-
 
   processFiles(files,function(source,dest,remote,toLocal){
     var destfile;

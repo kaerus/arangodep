@@ -136,40 +136,38 @@ function arangoConnection(conn_url) {
 /* remote connection and toLocal flag                 */ 
 /* todo: needs some refactoring */
 function processFiles(files,callback) {
-  var toLocal;
-
-  /* TODO: ability to read from stdin and write to stdout */
-  if(files.length < 2)
-    error("source and destination required");
+  var toLocal, remote;
 
   /* get sources & destination */
   sources = files.splice(0,files.length-1);
   destination = files[0];
 
   /* determine if destination is local or remote */
-  if(destination.match(/^(?:([A-Za-z]+):)/)) toLocal = false;
+  if(destination.match(/^(?:([A-Za-z]+):)/)){
+    toLocal = false;
+    remote = arangoConnection(destination); 
+  }  
   else toLocal = true;
  
   sources.forEach(function(source){ 
     if(toLocal) { 
       /* destination is local */
       try {
-        var remote = arangoConnection(source); 
+        remote = arangoConnection(source); 
       } catch (err) {
         error("source invalid or unavailable");
       }     
       callback(source,destination,remote,toLocal);
     } else {   
       /* destination is remote */
-      var remote = arangoConnection(destination); 
       try { 
-          stat = fs.statSync(source); 
-        } catch(err){ error("source invalid " + err.message) }   
+        stat = fs.statSync(source); 
+      } catch(err){ error("source invalid " + err.message) }   
       if(stat.isDirectory()){
-          /* upload entire directory & subdirs */
-          traverseFiles(source,function(sourcefile,destfile){
-            callback(sourcefile,destfile,remote,toLocal);
-          });
+        /* upload entire directory & subdirs */
+        traverseFiles(source,function(sourcefile,destfile){
+          callback(sourcefile,destfile,remote,toLocal);
+        });
       } else {
         /* destfile = sourcefile */
         destination = path.basename(source);
@@ -177,6 +175,9 @@ function processFiles(files,callback) {
       } 
     } 
   });
+  if(!sources || sources.length === 0) {
+    callback(null,destination,remote,toLocal);
+  }
 }
 
 
@@ -255,16 +256,6 @@ function process_store(argv) {
   processFiles(files,function(source,dest,remote,toLocal){
     var data, destdir, destfile;
     if(toLocal) {
-      try { 
-          stat = fs.statSync(dest);
-          if(!stat.isDirectory())
-            throw error("destination must be a directory"); 
-        }
-        catch(e){
-          try { fs.mkdirSync(dest,0777,true);
-            console.log("Created directory", dest); 
-          } catch(err) { error("Failed to make directory:", err.message) }  
-      }   
       /* get list of files from remote */
       remote.key.list(remote.basedir,function(err,ret){
         if(err) error("Failed list files: " + ret);
@@ -340,6 +331,8 @@ function process_module(argv) {
     console.log("Command:", program + ' ' + command + " <options> <sources> <destination>");
     console.log("Options:");
     console.log("-h --help".pad(16),"Shows this help" );
+    console.log("-l --list".pad(16),"List modules");
+    console.log("-s --search".pad(16),"Search modules");
     process.exit(0);
   }
 
@@ -349,6 +342,18 @@ function process_module(argv) {
       case '--help':
         help();
         break;
+      case '-l':
+      case '--list':
+        options.list = true;
+        break; 
+      case '-s':
+      case '--search':
+        options.search = argv[++i];
+        break;  
+      case '-d':
+      case '-delete':
+        options.remove = true;
+        break;     
       default:
         files.push(argv[i]);
         break;
@@ -359,17 +364,7 @@ function process_module(argv) {
   processFiles(files,function(source,dest,remote,toLocal){
     var destfile;
 
-    if(toLocal) {
-      try { 
-          stat = fs.statSync(dest);
-          if(!stat.isDirectory())
-            throw error("destination must be a directory"); 
-        }
-        catch(e){
-          try { fs.mkdirSync(dest,0777,true);
-            console.log("Created directory", dest); 
-          } catch(err) { error("Failed to make directory:", err.message) }  
-      }   
+    if(toLocal) {  
       /* get list of files from remote */
       remote.simple.list("_modules",{path:remote.basedir},function(err,ret){
         if(err) error("Modules not found: " + ret);
@@ -377,20 +372,39 @@ function process_module(argv) {
           ret.result.forEach(function(module){
             /* note: path must start with basedir */
             /* how is this done in arangodb ?     */
-            if(module.path.indexOf(remote.basedir) === 0)
-              remote_module_write_local(module,dest,remote);
+              if(module.path.indexOf(remote.basedir) === 0 || 
+                (options.search && module.path.indexOf(options.search) >=0 )) {
+                remote_module_write_local(module,dest,remote);
+              }  
           });
         } else console.log("No modules at ", remote.basedir);
       });
     } else {
       /* add remote basedir to destfile */
-      if(remote.basedir)
-        destfile = remote.basedir + '/' + dest;
-      else destfile = dest;
-
-      read_local_write_remote(source,destfile,remote);
+      if(options.list || options.search) {
+        remote.simple.list("_modules",{path:remote.basedir},function(err,ret){
+          if(err) error("Modules not found" + ret);
+          ret.result.forEach(function(module){
+            print_module_if(module,remote.basedir,options.search);   
+          });
+        });  
+      } else {
+        if(remote.basedir)
+          destfile = remote.basedir + '/' + dest;
+        else destfile = dest;
+        read_local_write_remote(source,destfile,remote);
+      }
     }
   });
+
+  function print_module_if(module,match,search){
+    var content = module.content;
+    delete module.content;
+    if((!match && !search) || module.path.indexOf(match) === 0 || search && module.path.indexOf(search) >= 0) {
+      console.log("//%j", module);
+      console.log(content);
+    }
+  }
 
   function remote_module_write_local(module,dest,remote){
     var destdir;

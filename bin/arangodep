@@ -635,7 +635,7 @@ function process_route(argv) {
   }
 
   if(options.reload) {
-    remote.get('_routing/reload',function(err,ret){
+    remote.get('routing/reload',function(err,ret){
       if(err) error("Failed to reload routing: " + ret);
       else console.log("Routes reloaded");
     });
@@ -686,9 +686,9 @@ function process_route(argv) {
   }
 
   function install_reloader(remote){
-    var reloader_module = 'exports.do = function(req,res){require("internal").reloadRouting();res.responseCode=200;}'
+    var reloader_module = 'exports.get = function(req,res){require("internal").reloadRouting();res.responseCode=200;};'
       , reloader_path = "org/arangodb/modules/actions/route_reloader"
-      , reloader_url = "_routing/reload";
+      , reloader_url = "routing/reload";
       
     remote.simple.first("_modules",{path:reloader_path},function(err,ret){
       if(err) {
@@ -696,11 +696,11 @@ function process_route(argv) {
           if(err) error("Failed to install reloader module: " + ret);
           remote.simple.first("_routing",{url:reloader_url},function(err,ret){
             if(err) {
-              remote.document.create("_routing",{url:routing_url,action:reloader_path},function(err,ret){
+              remote.document.create("_routing",{url:reloader_url,action:reloader_path},function(err,ret){
                 if(err) error("Failed to install reloader action" + ret);
               });
             } else {
-              remote.document.put(ret._id,{url:routing_url,action:reloader_path},function(err,ret){
+              remote.document.put(ret._id,{url:reloader_url,action:reloader_path},function(err,ret){
                 if(err) error("Failed to update reloader action:" + ret);
               });
             }   

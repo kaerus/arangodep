@@ -444,15 +444,7 @@ function process_module(argv) {
         } else console.log("No modules at ", remote.basedir);
       });
     } else {
-      /* add remote basedir to destfile */
-      if(options.list || options.search) {
-        remote.simple.list("_modules",{path:remote.basedir},function(err,ret){
-          if(err) error("Modules not found" + ret);
-          ret.result.forEach(function(module){
-            print_module_if(module,remote.basedir,options.path,options.view);   
-          });
-        });  
-      } else if (options.remove) {
+      if (options.remove) {
         if(!options.path && !options.id)
           error("Module path or id missing");
         if(options.id){
@@ -469,11 +461,25 @@ function process_module(argv) {
             });
           });
         }  
-      } else {
+      } else if(options.list || options.search || options.view) {
+          if(options.id) {
+            remote.document.get(options.id,function(err,ret){
+              if(err) error("Failed to read module: " + ret);
+              print_module_if(ret,remote.basedir,options.path,options.view);
+            });
+          } else {
+            remote.simple.list("_modules",{path:remote.basedir},function(err,ret){
+              if(err) error("Modules not found" + ret);
+              ret.result.forEach(function(module){
+               print_module_if(module,remote.basedir,options.path,options.view);   
+              });
+            });
+          }    
+      } else { 
         if(remote.basedir)
           destfile = remote.basedir + '/' + dest;
         else destfile = dest;
-        read_local_write_remote(source,destfile,remote);
+        read_local_write_remote(source,destfile,remote); 
       }
     }
   });

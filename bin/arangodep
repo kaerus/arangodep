@@ -155,7 +155,13 @@ function processFiles(files,callback) {
   } else {
     remote = arangoConnection();
     toLocal = false;
-  }  
+  }
+
+  if(sources.length === 0 && !remote){
+      remote = arangoConnection();
+      sources.push(destination);
+      toLocal = false;
+  }
 
   sources.forEach(function(source){ 
     if(toLocal) { 
@@ -182,8 +188,9 @@ function processFiles(files,callback) {
       } 
     } 
   });
+
   if(!sources || sources.length === 0) {
-    callback(null,destination,remote,toLocal);
+    callback(null,destination,remote,false);
   }
 }
 
@@ -478,10 +485,12 @@ function process_module(argv) {
             });
           }    
       } else { 
+        if(!options.path && !remote.basedir)
+          error("Module path option missing");
         if(remote.basedir)
-          destfile = remote.basedir + '/' + dest;
-        else destfile = dest;
-        read_local_write_remote(source,destfile,remote); 
+          dest = remote.basedir + '/' + path.basename(dest);
+        else dest = options.path;
+        read_local_write_remote(source,dest,remote); 
       }
     }
   });
@@ -520,6 +529,7 @@ function process_module(argv) {
   }
 
   function read_local_write_remote(source,dest,remote){
+    
     if(isBinary(source)) 
       error("Binary modules are not permitted");
 

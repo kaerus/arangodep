@@ -629,7 +629,7 @@ function process_route(argv) {
       if(err) error("List routing failed:" + ret);
       if(ret.result){
         ret.result.forEach(function(route){
-          if(route.url == options.url || route.url.match === options.url) {
+          if(route.url === options.url || route.url.match === options.url) {
             if(!options.view) {
               add_route(remote,options,route);
             } else {
@@ -639,7 +639,7 @@ function process_route(argv) {
           } 
         });
         if(!updated&&!options.remove){
-          if(!options.list) {
+          if(!options.view) {
             add_route(remote,options,null);
           } else {
             console.log(ret.result);

@@ -32,11 +32,11 @@ var arango = require('arango.client')
       route: {command: process_route, brief: "manipulates routing"},
       dummy: {command: process_dummy, brief: "crash test dummy"}
     }, program, error
-  , PSEP = process.platform === 'win32' ? '\\' : '/';  
-
+  , PSEP = process.platform === 'win32' ? '\\' : '/'
+  , VERSION = JSON.parse(fs.readFileSync("package.json")).version;
 
 function help() {
-  console.log("Arango deployment tools v0.3.2 by Anders Elo <anders @ kaerus com>.");
+  console.log("Arango deployment tools v" + VERSION + " by Anders Elo <anders @ kaerus com>.");
   console.log("Commands:");
   Object.keys(deploy).forEach(function(command){
     console.log("%s:",command.pad(-16),deploy[command].brief)
@@ -73,7 +73,7 @@ function error(msg,code) {
 process.argv.shift(); 
 program = path.basename(process.argv.shift()); 
 
-if(process.argv.length < 2) help();
+if(process.argv.length < 1) help();
 
 try {
   deploy[process.argv[0]].command.call(null,process.argv);
@@ -113,7 +113,7 @@ function traverseFiles(dir,callback,subdir){
       } else if(stat.isFile()) {
         callback(realpath,basepath);
       }  
-    } catch(err) { error("Failed to read file or directory:", err.message ) }    
+    } catch(err) { error("Failed to read file or directory: " + err.message ) }    
   });    
 }
 
@@ -200,6 +200,8 @@ function process_dummy(argv) {
     process.exit(0);
   }
 
+  if(argv.length < 1) help();
+
   for(i = 0; i < argv.length; i++) {
     switch(argv[i]) {
       case '-h':
@@ -242,6 +244,8 @@ function process_store(argv) {
     console.log("-d --delete".pad(16),"Delete files");
     process.exit(0);
   }
+
+  if(argv.length < 1) help();
 
   for(i = 0; i < argv.length; i++) {
     switch(argv[i]) {
@@ -382,6 +386,8 @@ function process_module(argv) {
     console.log("-d --delete".pad(16),"Delete module");
     process.exit(0);
   }
+
+  if(argv.length < 1) help();
 
   for(i = 0; i < argv.length; i++) {
     switch(argv[i]) {
@@ -557,6 +563,8 @@ function process_route(argv) {
     process.exit(0);
   }
 
+  if(argv.length < 1) help();
+
   for(i = 0; i < argv.length; i++) {
     switch(argv[i]) {
       case '-h':
@@ -635,7 +643,7 @@ function process_route(argv) {
   }
 
   if(options.reload) {
-    remote.get('routing/reload',function(err,ret){
+    remote.get('_admin/routing/reload',function(err,ret){
       if(err) error("Failed to reload routing: " + ret);
       else console.log("Routes reloaded");
     });

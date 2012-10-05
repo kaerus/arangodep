@@ -31,12 +31,17 @@ var arango = require('arango.client')
       module: {command: process_module, brief: "deploy files as modules"},
       route: {command: process_route, brief: "manipulates routing"},
       dummy: {command: process_dummy, brief: "crash test dummy"}
-    }, program, error
-  , PSEP = process.platform === 'win32' ? '\\' : '/'
-  , VERSION = JSON.parse(fs.readFileSync("package.json")).version;
+    }, program, program_path, error
+  , PSEP = process.platform === 'win32' ? '\\' : '/';
+
+process.argv.shift(); 
+program_path = process.argv.shift();
+/* todo: where's package.json? */
+//var VERSION = JSON.parse(fs.readFileSync(path.dirname(program_path)+"/../package.json")).version;
+program = path.basename(program_path); 
 
 function help() {
-  console.log("Arango deployment tools v" + VERSION + " by Anders Elo <anders @ kaerus com>.");
+  console.log("Arango deployment tools v0.3.x by Anders Elo <anders @ kaerus com>.");
   console.log("Commands:");
   Object.keys(deploy).forEach(function(command){
     console.log("%s:",command.pad(-16),deploy[command].brief)
@@ -69,9 +74,6 @@ function error(msg,code) {
   console.error(msg);
   process.exit(code||-1);
 }
-
-process.argv.shift(); 
-program = path.basename(process.argv.shift()); 
 
 if(process.argv.length < 1) help();
 

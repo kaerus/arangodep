@@ -29,5 +29,5 @@
     "url": "git://github.com/kaerus/arangodep.git"
   },
   "main": "index.js",
-  "license": "MIT"
+  "license": "APACHE2.0"
 }

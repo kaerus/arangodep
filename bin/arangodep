@@ -563,7 +563,7 @@ function process_route(argv) {
   var command = argv.shift()
     , options = {}
     , files = []
-    , remote, updated;
+    , remote, matched;
 
   function help() {
     console.log("Deploy action routing");
@@ -642,25 +642,40 @@ function process_route(argv) {
       if(err) error("Route not found: " + route);
       add_route(remote,options,route);  
     });
-  } else if(options.url || options.view) {
+  } else {
     remote.simple.list("_routing",{url:true},function(err,ret){
-      if(err) error("List routing failed:" + ret);
+      var url, action, m1, m2;
+      if(err) error("List routings failed:" + ret);
       if(ret.result){
         ret.result.forEach(function(route){
-          if(route.url === options.url || route.url.match === options.url) {
+          if(options.url) {
+            url = (typeof route.url.match === 'string') ? route.url.match : route.url;   
+          } 
+          if(options.action) {
+            action = (typeof route.action.prefixController === 'string') ? route.action.prefixController :
+                      (typeof route.action.controller ==='string') ? route.action.controller : route.action;
+          }
+          m1 = url && url.indexOf(options.url) >= 0;
+          m2 = action && action.indexOf(options.action) >=0;  
+          if((url && action && m1 && m2)||(url&&!action&&m1)||(!url&&action&&m2) ) {
             if(!options.view) {
               add_route(remote,options,route);
             } else {
               console.log(route);
             }  
-            updated = true;
+            matched = true;
           } 
         });
-        if(!updated&&!options.remove){
+        if(!matched&&!options.remove){
           if(!options.view) {
             add_route(remote,options,null);
-          } else {
+          } else if(!options.url&&!options.action){
             console.log(ret.result);
+          } else {
+            if(options.url)
+              console.log("No route found for url: " + options.url);
+            if(options.action)
+              console.log("No route found for action: " + options.action);
           }  
         }
       }

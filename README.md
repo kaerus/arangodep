@@ -51,38 +51,14 @@ Options:
 To view a selection of routes specify the url by using the ```-u``` option and include ```-v``` for viewing.
 The last option is the url to the server, if omitted it defaults to ```http://127.0.0.1:8529```.
 ```
-$ arangodep route -u /org/arangodb -v http://127.0.0.1:8529
-[ 
-  { _id: '27804071/858341799',
-    _rev: 858341799,
-    url: 'com/kaerus/modules',
-    action: '/org.arangodb/actions/routes' },
-  { _id: '27804071/29639079',
-    _rev: 30622119,
-    url: { match: '/hello/world' },
-    action: { controller: 'org/arangodb/actions/hello' } },
-  { _id: '27804071/855327143',
-    _rev: 855327143,
-    action: 'org/kaerus/modules/routing',
-    url: { constraint: 'nada', match: '/test/dummy' } },
-  { _id: '27804071/30818727',
-    _rev: 30818727,
-    url: { match: '/routes' },
-    action: { controller: 'org/arangodb/actions/routes' } },
-  { _id: '27804071/932135335',
-    _rev: 932135335,
-    url: 'routing/reload',
-    action: 'org/arangodb/modules/actions/route_reloader' } ]
+$ arangodep route -u com/kaerus -v
+options.url: com/kaerus
+{ _id: '27804071/858341799',
+  _rev: 858341799,
+  url: 'com/kaerus/modules',
+  action: '/org.arangodb/actions/routes' }
 ```
-To delete a route you can specify the route with ```--id <id>``` and ```--delete```.
-```
-$ arangodep route --id 27804071/855327143 --delete
-Route deleted:  { action: 'org/kaerus/modules/routing',
-  url: { constraint: 'nada', match: '/test/dummy' },
-  _id: '27804071/855327143',
-  _rev: 855327143 }
-```
-To get a list of all routes in a compact format use ```--view```without the url option.
+To get a list of all routes use ```--view```without the url option.
 ```
 $ arangodep route --view
 [ { _id: '27804071/858341799',
@@ -104,6 +80,15 @@ $ arangodep route --view
 
 ```
 To get a detailed list of the routing table use ```--list```.
+
+To delete a route you can specify the route with ```--id <id>``` and ```--delete```.
+```
+$ arangodep route --id 27804071/855327143 --delete
+Route deleted:  { action: 'org/kaerus/modules/routing',
+  url: { constraint: 'nada', match: '/test/dummy' },
+  _id: '27804071/855327143',
+  _rev: 855327143 }
+```
 
 To add a route you only need to specify the action (controller) and the url (location).
 ```

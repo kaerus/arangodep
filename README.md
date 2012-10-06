@@ -58,6 +58,14 @@ options.url: com/kaerus
   url: 'com/kaerus/modules',
   action: '/org.arangodb/actions/routes' }
 ```
+
+Alter a route by specifying the route id and what you need to change.
+```
+$ arangodep route -i 27804071/858341799 -a /org/arangodb/actions/routes
+Route updated:  { url: 'com/kaerus/modules',
+  action: '/org/arangodb/actions/routes' }
+```
+
 To get a list of all routes use ```--view```without the url option.
 ```
 $ arangodep route --view

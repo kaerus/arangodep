@@ -27,16 +27,15 @@ var arango = require('arango.client')
       route: {command: process_route, brief: "manipulates routing"},
       dummy: {command: process_dummy, brief: "crash test dummy"}
     }, program, program_path, error
-  , PSEP = process.platform === 'win32' ? '\\' : '/';
+  , PSEP = process.platform === 'win32' ? '\\' : '/'
+  , VERSION = require("../package").version;
 
 process.argv.shift(); 
 program_path = process.argv.shift();
-/* todo: where's package.json? */
-//var VERSION = JSON.parse(fs.readFileSync(path.dirname(program_path)+"/../package.json")).version;
 program = path.basename(program_path); 
 
 function help() {
-  console.log("Arango deployment tools v0.3.x by Anders Elo <anders @ kaerus com>.");
+  console.log("Arango deployment tools v"+VERSION+" by Anders Elo <anders @ kaerus com>.");
   console.log("Commands:");
   Object.keys(deploy).forEach(function(command){
     console.log("%s:",command.pad(-16),deploy[command].brief)

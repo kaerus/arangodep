@@ -573,6 +573,7 @@ function process_route(argv) {
     console.log("-u --url".pad(16),"Url to match");
     console.log("-a --action".pad(16),"Action controller");
     console.log("-c --constraint".pad(16),"Url constraints");
+    console.log("-p --prefix".pad(16),"Prefix controller");
     console.log("-l --list".pad(16),"List routes");
     console.log("-v --view".pad(16),"View route");
     console.log("-i --id".pad(16),"Route id");
@@ -601,6 +602,10 @@ function process_route(argv) {
       case '--constraint':
         options.constraint = argv[++i];
         break;      
+      case '-p':
+      case '--prefix':
+        options.prefix = true;
+        break;  
       case '-d':
       case '--delete':
         options.remove = true;
@@ -640,7 +645,9 @@ function process_route(argv) {
   } else if(options.id){
     remote.document.get(options.id,function(err,route){
       if(err) error("Route not found: " + route);
-      add_route(remote,options,route);  
+      if(options.view) {
+        console.log(route);
+      } else add_route(remote,options,route);  
     });
   } else {
     remote.simple.list("_routing",{url:true},function(err,ret){
@@ -713,23 +720,31 @@ function process_route(argv) {
         doc.action.do = options.do;
     }
 
-    if(!route && !options.remove) {
+    if(options.prefix) {
+      if(typeof doc.action === 'string')
+        doc.action = {prefixController:doc.action};
+      else {
+        doc.action.prefixController = options.action;
+        delete doc.action.controller;
+      }
+    }
+
+    if(!route) {
       remote.document.create("_routing",doc,function(err,ret){
         if(err) error("Failed to create route:" + ret);
         console.log("Route added: ", doc);  
       });
-    } else {
-      if(!options.remove){
-        remote.document.put(route._id,doc,function(err,ret){
-          if(err) error("Failed to update route: " + ret);
-          console.log("Route updated: ", doc);  
-        });
-      } else {
-        remote.document.delete(route._id,function(err,ret){
-          if(err) error("Failed to remove route: " + ret);
-          console.log("Route deleted: ", route);  
-        });
-      }
+    } else if(options.remove) {
+      remote.document.delete(route._id,function(err,ret){
+        if(err) error("Failed to remove route: " + ret);
+        console.log("Route deleted: ", route);  
+      });
+    }
+    else {
+      remote.document.put(route._id,doc,function(err,ret){
+        if(err) error("Failed to update route: " + ret);
+        console.log("Route updated: ", doc);  
+      });
     }  
   }
 

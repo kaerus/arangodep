@@ -14,13 +14,13 @@ Usage
 -----
 Execute ```arangodep``` to see command options.
 ```
-$ arangodep
-Arango deployment tools v0.3.2 by Anders Elo <anders @ kaerus com>.
+Arango deployment tools v0.3.5 by Anders Elo <anders @ kaerus com>.
 Commands:
            store: deploy files as key-values
           module: deploy files as modules
-           dummy: dummy process
-type: 'arangodep <command> --help' for more information.
+           route: manipulates routing
+           dummy: crash test dummy
+type 'arangodep <command> --help' for more information.
 ```
 
 Warning: this tool can ruin you database, use with caution! 
@@ -106,6 +106,13 @@ Route added:  { url: 'api/myapi/mymodule',
 ```
 The url can include a constraint, specified with the ```--contraint```option.
 The action can include a (non conventional) method specified with the ```--do```option.
+
+For the changes to take effect you must reload the routing table with ```--reload```
+```
+$ arangodep route --reload
+Routes reloaded
+```
+
 
 arangodep module
 ----------------

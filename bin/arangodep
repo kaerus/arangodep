@@ -643,7 +643,7 @@ function process_route(argv) {
         console.log(route);
       } else add_route(remote,options,route);  
     });
-  } else {
+  } else if(options.url || options.action || options.view){
     remote.simple.list("_routing",{url:true},function(err,ret){
       var url, action, m1, m2;
       if(err) error("List routings failed:" + ret);

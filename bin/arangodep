@@ -103,7 +103,7 @@ function isBinary(data,file) {
     return false;
 
   /* use heuristics (same as git) */
-  if(!data && data.slice(0,data.length > 1024 ? 1024 : data.length-1).toString().indexOf('\u0000') < 0) 
+  if(data.slice(0,data.length > 1024 ? 1024 : data.length-1).toString().indexOf('\u0000') < 0) 
     return false;
   
   return true;
@@ -364,11 +364,12 @@ function process_store(argv) {
 
   function read_remote_write_local(source,dest,remote){
     remote.key.get(source).on('result',function(ret,hdr){
-      console.log("Downloaded %s (%s bytes)", dest, ret ? ret.length : 0);
       try {
         if(isBinary(ret,dest)){
+          console.log("BIN: %s (%s bytes)", dest, ret ? ret.length : 0);
           fs.writeFileSync(dest,new Buffer(ret,'base64').toString('binary'),'binary');
         } else {
+          console.log("ASC: %s (%s bytes)", dest, ret ? ret.length : 0);
           fs.writeFileSync(dest,ret,'utf-8');
         } 
       } catch(err) { error("Failed to write file:", err.message) }
@@ -376,17 +377,18 @@ function process_store(argv) {
   }
 
   function read_local_write_remote(source,dest,remote,expiry) {
-    var data;
+    var data, bin;
     try {
       data = fs.readFileSync(source);
     } catch(err) { error("Failed to read file:", err.message) } 
 
+    bin = isBinary(data,source);
     remote.key.put(dest, { 
           expires:expiry,
           extended:{contentType: mime.lookup(source)}
-          }, isBinary(data,source) ? data.toString('base64') : data, function(err,ret) {
+          }, bin ? data.toString('base64') : data, function(err,ret) {
               if(err) error("Failed to deploy " + source + ": " + ret);
-              else console.log("Deployed %s (%s bytes)", source, data.length);  
+              else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", source, data.length);  
     }); 
   }
 } /* end of process_store */

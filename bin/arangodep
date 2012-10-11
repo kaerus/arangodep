@@ -309,7 +309,7 @@ function process_store(argv) {
         if(err) error("Failed list files: " + ret);
         ret.forEach(function(sourcefile){
           /* destfile is same as sourcefile without remote basedir */
-          destfile = dest+sourcefile.replace(remote.basedir,'');
+          destfile = dest+sourcefile.replace('%20',' ').replace(remote.basedir,'');
           try{ 
             fs.statSync(destfile); 
           } catch(e) {
@@ -332,7 +332,7 @@ function process_store(argv) {
           ret.forEach(function(file){
             if(options.view){
               remote.key.get(file,function(err,ret,hdr){
-                if(err) error("Failed to get " + file + " :" + ret);
+                if(err) error("Failed to get remote " + file + " :" + ret);
                 console.log(hdr);
                 console.log(ret);
               });
@@ -350,19 +350,23 @@ function process_store(argv) {
           destfile = remote.basedir + '/' + dest;
         else destfile = dest;
 
+        /* uri encode spaces since arangodb can't handle that */
+        destfile = destfile.replace(' ','%20');
+
         if(!(typeof options.expiry === 'object'))
           error("expiry date missing");
-    
+
         read_local_write_remote(source,destfile,remote,options.expiry);  
       }
     }  
   });    
 
+
   function read_remote_write_local(source,dest,remote){
     remote.key.get(source).on('result',function(ret,hdr){
       console.log("Downloaded %s (%s bytes)", dest, ret ? ret.length : 0);
       try {
-        if(isBinary(ret,source)){
+        if(isBinary(ret,dest)){
           fs.writeFileSync(dest,new Buffer(ret,'base64').toString('binary'),'binary');
         } else {
           fs.writeFileSync(dest,ret,'utf-8');
@@ -381,8 +385,8 @@ function process_store(argv) {
           expires:expiry,
           extended:{contentType: mime.lookup(source)}
           }, isBinary(data,source) ? data.toString('base64') : data, function(err,ret) {
-              if(err) error("Failed to deploy " + dest + ": " + ret);
-              else console.log("Deployed %s (%s bytes)", dest, data.length);  
+              if(err) error("Failed to deploy " + source + ": " + ret);
+              else console.log("Deployed %s (%s bytes)", source, data.length);  
     }); 
   }
 } /* end of process_store */

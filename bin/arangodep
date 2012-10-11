@@ -77,17 +77,35 @@ try {
   error(err);
 } 
 
-function isBinary(file) {
-  switch(path.extname(file)){
-    case '.html':
-    case '.htm':
-    case '.js':
-    case '.json':
-    case '.css':
-    case '.txt':
-    case '.md':
-      return false;
+function isBinary(data,file) {
+
+  if(file) {
+    /* shortcut for well-known types */ 
+    switch(path.extname(file)){ 
+      case '.html':
+      case '.htm':
+      case '.js':
+      case '.json':
+      case '.java':
+      case '.css':
+      case '.txt':
+      case '.md':
+      case '.cpp':
+      case '.hpp':
+      case '.c':
+      case '.h':
+      case '.py':
+        return false;
+    }
   }
+  /* zero sized */
+  if(!data && !data.length) 
+    return false;
+
+  /* use heuristics (same as git) */
+  if(!data && data.slice(0,data.length > 1024 ? 1024 : data.length-1).toString().indexOf('\u0000') < 0) 
+    return false;
+  
   return true;
 }
 
@@ -109,7 +127,7 @@ function traverseFiles(dir,callback,subdir){
       } else if(stat.isFile()) {
         callback(realpath,basepath);
       }  
-    } catch(err) { error("Failed to read file or directory: " + err.message ) }    
+    } catch(err) { error("Failed to read " + realpath + ": " + err.message ) }    
   });    
 }
 
@@ -344,7 +362,7 @@ function process_store(argv) {
     remote.key.get(source).on('result',function(ret,hdr){
       console.log("Downloaded %s (%s bytes)", dest, ret ? ret.length : 0);
       try {
-        if(isBinary(source)){
+        if(isBinary(ret,source)){
           fs.writeFileSync(dest,new Buffer(ret,'base64').toString('binary'),'binary');
         } else {
           fs.writeFileSync(dest,ret,'utf-8');
@@ -362,7 +380,7 @@ function process_store(argv) {
     remote.key.put(dest, { 
           expires:expiry,
           extended:{contentType: mime.lookup(source)}
-          }, isBinary(source) ? data.toString('base64') : data, function(err,ret) {
+          }, isBinary(data,source) ? data.toString('base64') : data, function(err,ret) {
               if(err) error("Failed to deploy " + dest + ": " + ret);
               else console.log("Deployed %s (%s bytes)", dest, data.length);  
     }); 
@@ -524,13 +542,13 @@ function process_module(argv) {
   }
 
   function read_local_write_remote(source,dest,remote){
-    
-    if(isBinary(source)) 
-      error("Binary modules are not permitted");
 
     try {
       data = fs.readFileSync(source).toString();
     } catch(err) { error("Failed to read file:",err.message); }
+
+    if(isBinary(data,source)) 
+      error("Binary modules are not allowed");
 
     /* check if module exists */
     remote.simple.first("_modules",{path:dest},function(err,ret){

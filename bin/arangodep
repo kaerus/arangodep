@@ -363,7 +363,7 @@ function process_store(argv) {
           expires:expiry,
           extended:{contentType: mime.lookup(source)}
           }, isBinary(source) ? data.toString('base64') : data, function(err,ret) {
-              if(err) error("Failed to update " + dest + ": " + ret);
+              if(err) error("Failed to deploy " + dest + ": " + ret);
               else console.log("Deployed %s (%s bytes)", dest, data.length);  
     }); 
   }

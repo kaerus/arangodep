@@ -8,7 +8,6 @@ Install
 ```
 sudo npm install https://github.com/kaerus/arangodep -g
 ```
-...and don't forget to update with ```npm update```.
 
 Usage
 -----

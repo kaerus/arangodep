@@ -6,7 +6,7 @@ Arango deployment tools.
 Install
 -------
 ```
-sudo npm install https://github.com/kaerus/arangodep -g
+sudo npm install git://github.com/kaerus/arangodep -g
 ```
 
 Usage

@@ -96,6 +96,29 @@ function isBinary(data,file) {
       case '.h':
       case '.py':
         return false;
+      case '.bin':
+      case '.jpg':
+      case '.jpeg':
+      case '.png':
+      case '.tiff':
+      case '.gif':
+      case '.ico':
+      case '.exe':
+      case '.mov':
+      case '.mpg':
+      case '.mpeg':
+      case '.avi':
+      case '.gz':
+      case '.gzip':
+      case '.zip':
+      case '.tar':
+      case '.dmg':
+      case '.wav':
+      case '.aiff':
+      case '.mp3':
+      case '.mp4':
+      case '.ogg':
+        return true;
     }
   }
   /* zero sized */

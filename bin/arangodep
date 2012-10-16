@@ -140,17 +140,21 @@ function traverseFiles(dir,callback,subdir){
   var files = fs.readdirSync(dir), 
       extname, realpath, basepath;    
   files.forEach(function(file){
+    realpath = subdir ? dir+PSEP+file : dir+file;
+    basepath = subdir ? subdir+PSEP+file : file;
     try {
-      realpath = subdir ? dir+PSEP+file : dir+file;
-      basepath = subdir ? subdir+PSEP+file : file;
       stat = fs.statSync(realpath);
-      /* traverse subdirs */
-      if(stat.isDirectory()) {
-        traverseFiles(realpath,callback,basepath);
-      } else if(stat.isFile()) {
-        callback(realpath,basepath);
-      }  
-    } catch(err) { error("Failed to read " + realpath + ": " + err.message ) }    
+    } catch(err) { error("Failed to read " + realpath + ": " + err.message ) }  
+    /* traverse subdirs */
+    if(stat.isDirectory()) {
+      traverseFiles(realpath,callback,basepath);
+    } else if(stat.isFile()) {
+      callback(realpath,basepath);
+    } else if(stat.isSymbolicLink()) {
+      console.log("* Ignoring symlink", realpath);
+    } else {
+      console.log("* Ignoring", realpath);
+    }    
   });    
 }
 
@@ -213,6 +217,7 @@ function processFiles(files,callback) {
         stat = fs.statSync(source); 
       } catch(err){ error("source invalid " + err.message) }   
       if(stat.isDirectory()){
+        if(source[source.length-1] !== '/') source+='/';
         traverseFiles(source,function(sourcefile,destfile){
           callback(sourcefile,destfile,remote,toLocal);
         });
@@ -406,13 +411,11 @@ function process_store(argv) {
     } catch(err) { error("Failed to read file:", err.message) } 
 
     bin = isBinary(data,source);
-    remote.key.put(dest, { 
-          expires:expiry,
-          extended:{contentType: mime.lookup(source)}
-          }, bin ? data.toString('base64') : data, function(err,ret) {
-              if(err) error("Failed to deploy " + source + ": " + ret);
-              else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", source, data.length);  
-    }); 
+    remote.key.put(dest, {expires:expiry,extended:{contentType: mime.lookup(source)}}, 
+          bin ? data.toString('base64') : data, function(err,ret) {
+            if(err) error("Failed to deploy " + source + ": " + ret);
+            else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", source, data.length);  
+    });       
   }
 } /* end of process_store */
 

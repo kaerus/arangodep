@@ -122,11 +122,11 @@ function isBinary(data,file) {
     }
   }
   /* zero sized */
-  if(!data && !data.length) 
+  if(!data || !data.length) 
     return false;
 
   /* use heuristics (same as git) */
-  if(data.slice(0,data.length > 1024 ? 1024 : data.length-1).toString().indexOf('\u0000') < 0) 
+  if(data.slice(0,data.length > 1024 ? 1024 : data.length-1).toString().indexOf('\u0000') < 0)  
     return false;
   
   return true;
@@ -305,7 +305,7 @@ function process_store(argv) {
       case '-e':
       case '--expiry':
         options.expiry = new Date(Date.parse(argv[++i],"yyyy-MM-dd HH:MM:SS")); 
-        console.log("Epiry date: ", options.expiry.toString()); 
+        console.log("Expiry date: ", options.expiry.toString()); 
         break;  
       case '-l':
       case '--list':
@@ -324,6 +324,9 @@ function process_store(argv) {
         options.remove = true;
         break;  
       default:
+        if(argv[i].match(/^--[a-z]+$/)){
+          error("Invalid option "+argv[i]);
+        }
         files.push(argv[i]);
         break;
     }

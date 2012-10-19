@@ -621,7 +621,9 @@ function process_route(argv) {
     console.log("-u --url".pad(16),"Url to match");
     console.log("-a --action".pad(16),"Action controller");
     console.log("-c --constraint".pad(16),"Url constraints");
+    console.log("-o --controller".pad(16),"Specific controller");
     console.log("-p --prefix".pad(16),"Prefix controller");
+    console.log("-x --do".pad(16),"Do controller method");
     console.log("-l --list".pad(16),"List routes");
     console.log("-v --view".pad(16),"View route");
     console.log("-i --id".pad(16),"Route id");
@@ -670,6 +672,14 @@ function process_route(argv) {
       case '--id':
         options.id = argv[++i];
         break;  
+      case '-o':
+      case '--controller':
+        options.controller = argv[++i];
+        break;
+      case '-x':
+      case '--do':
+        options.do = argv[++i];
+        break;      
       case '-r':
       case '--reload':
         options.reload = true;
@@ -766,6 +776,14 @@ function process_route(argv) {
         doc.action = {controller:doc.action,do:options.do};
       else 
         doc.action.do = options.do;
+    }
+
+    if(options.controller){
+      if(typeof doc.action === 'string')
+        doc.action = {controller:options.controller};
+      else {
+        doc.action.controller = options.controller;
+      }
     }
 
     if(options.prefix) {

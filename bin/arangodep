@@ -437,6 +437,7 @@ function process_module(argv) {
     console.log("-h --help".pad(16),"Shows this help" );
     console.log("-p --path".pad(16),"Module path");
     console.log("-i --id".pad(16),"Module id");
+    console.log("-a --autoload".pad(16),"Autoload module");
     console.log("-l --list".pad(16),"List modules");
     console.log("-v --view".pad(16),"View module");
     console.log("-s --search".pad(16),"Search modules");
@@ -476,6 +477,10 @@ function process_module(argv) {
       case '--view':
         options.view = true;
         break;     
+      case '-a':
+      case '--autoload':
+        options.autoload = argv[++i] === 'true' ? true : false;
+        break;  
       default:
         files.push(argv[i]);
         break;
@@ -538,7 +543,7 @@ function process_module(argv) {
         if(remote.basedir)
           dest = remote.basedir + '/' + path.basename(dest);
         else dest = options.path;
-        read_local_write_remote(source,dest,remote); 
+        read_local_write_remote(source,dest,remote,options.autoload); 
       }
     }
   });
@@ -576,7 +581,8 @@ function process_module(argv) {
     }    
   }
 
-  function read_local_write_remote(source,dest,remote){
+  function read_local_write_remote(source,dest,remote,autoload){
+    var _module;
 
     try {
       data = fs.readFileSync(source).toString();
@@ -585,19 +591,23 @@ function process_module(argv) {
     if(isBinary(data,source)) 
       error("Binary modules are not allowed");
 
+    _module = {path:dest,content:data};
+    if(autoload) _module.autoload = true;
+    else if(autoload === false) _module.autoload = false;
+
     /* check if module exists */
     remote.simple.first("_modules",{path:dest},function(err,ret){
       if(err){
         /* no module found */
-        remote.document.create("_modules",{path:dest,content:data},function(err,ret){
+        remote.document.create("_modules",_module,function(err,ret){
           if(err) error("Failed to deploy module: " + ret);
-          else console.log("Deployed module %s to %s", source, dest); 
+          console.log("Deployed module %s to %s", source, dest); 
         });
       } else {
         /* update existing */
-        remote.document.put(ret.document._id,{path:dest,content:data},function(err,ret){
+        remote.document.put(ret.document._id,_module,function(err,ret){
           if(err) error("Failed to update module: " + ret);
-          else console.log("Updated module %s to %s", source, dest);  
+          console.log("Updated module %s to %s", source, dest);
         });
       } 
     });
@@ -758,11 +768,10 @@ function process_route(argv) {
   function add_route(remote,options,route){
     if(!route) {
       if(!options.url) error("Missing --url option");
-      if(!options.action) error("Missing --action option");
     }
 
     /* merge route data */
-    var doc = {url:options.url||route.url,action:options.action||route.action};
+    var doc = {url:options.url||route.url,action:options.action||route ? route.action:""};
 
     if(options.constraint){
       if(typeof doc.url === 'string')

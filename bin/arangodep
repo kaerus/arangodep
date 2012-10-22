@@ -25,6 +25,7 @@ var arango = require('arango.client')
       store: {command: process_store, brief: "deploy files as key-values"},
       module: {command: process_module, brief: "deploy files as modules"},
       route: {command: process_route, brief: "manipulates routing"},
+      app: {command: process_app, brief: "deploy application"},
       dummy: {command: process_dummy, brief: "crash test dummy"}
     }, program, program_path, error
   , PSEP = process.platform === 'win32' ? '\\' : '/'
@@ -774,6 +775,15 @@ function process_route(argv) {
     var doc = {url:options.url||route.url,action:options.action||route ? route.action:""};
 
     if(options.constraint){
+      try {
+        options.constraint = JSON.parse(options.constraint);
+      } catch(e) {
+        try {
+          options.constraint = JSON.parse('{'+options.constraint+'}');
+        } catch(e){
+          error("Invalid constraint" + e.message);
+        }
+      }  
       if(typeof doc.url === 'string')
         doc.url = {match:doc.url,constraint:options.constraint};
       else 
@@ -807,20 +817,63 @@ function process_route(argv) {
     if(!route) {
       remote.document.create("_routing",doc,function(err,ret){
         if(err) error("Failed to create route:" + ret);
-        console.log("Route added: ", doc);  
+        console.log("Route added:", JSON.stringify(doc));  
       });
     } else if(options.remove) {
       remote.document.delete(route._id,function(err,ret){
         if(err) error("Failed to remove route: " + ret);
-        console.log("Route deleted: ", route);  
+        console.log("Route deleted:", JSON.stringify(route));  
       });
     }
     else {
       remote.document.put(route._id,doc,function(err,ret){
         if(err) error("Failed to update route: " + ret);
-        console.log("Route updated: ", doc);  
+        console.log("Route updated:", JSON.stringify(doc));  
       });
     }  
   }
 
 } /* end of process_route */
+
+/* deploy application */
+function process_app(argv) {
+  var command = argv.shift()
+    , options = {}
+    , files = [];
+
+  function help() {
+    console.log("Deploy application");
+    console.log("Command:", program + ' ' + command + " <options> <sources> <destination>");
+    console.log("Options:");
+    process.exit(0);
+  }
+
+  if(argv.length < 1) help();
+
+  for(i = 0; i < argv.length; i++) {
+    switch(argv[i]) {
+      case '-h':
+      case '--help':
+        help();
+        break;
+      case '-m':
+      case '--manifest':
+        options.manifest = argv[++i];
+        break;  
+      default:
+        files.push(argv[i]);
+        break;
+    }
+  }
+
+  processFiles(files,function(source,destination,remote,toLocal){
+    
+    if(toLocal) {
+      console.log("Download %s to %s", source, destination);
+    } else {  
+      console.log("Deploy %s to %s", source, destination);
+
+    }
+  });
+  
+} /* end of process_application */

@@ -585,7 +585,7 @@ function process_module(argv) {
   }
 
   function read_local_write_remote(source,dest,remote,autoload){
-    var ESparser = require('esprima'), _module;
+    var ESparser = require('esprima'), syntax, _module;
 
     try {
       data = fs.readFileSync(source).toString();
@@ -596,10 +596,11 @@ function process_module(argv) {
 
     /* catch syntax errors */
     try {
-      ESparser.parse(data);
+      syntax = ESparser.parse(data);
     } catch(e) {
       error("Module contained errors: " + JSON.stringify(e,null,2));
     }
+    /* todo: analyse syntax */
 
     _module = {path:dest,content:data};
     if(autoload) _module.autoload = true;
@@ -781,7 +782,7 @@ function process_route(argv) {
     }
 
     /* merge route data */
-    var doc = {url:options.url||route.url,action:options.action||route ? route.action:""};
+    var doc = {url:options.url||route.url,action:options.action||(route ? route.action:"")};
 
     if(options.constraint){
       try {

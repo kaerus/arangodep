@@ -638,7 +638,7 @@ function process_route(argv) {
     console.log("-p --prefix".pad(16),"Prefix controller");
     console.log("-x --do".pad(16),"Do controller method");
     console.log("-l --list".pad(16),"List routes");
-    console.log("-v --view".pad(16),"View route");
+    console.log("-v --view".pad(16),"View routing table");
     console.log("-i --id".pad(16),"Route id");
     console.log("-d --delete".pad(16),"Delete route");
     console.log("-r --reload".pad(16),"Reloads routing table");
@@ -705,7 +705,7 @@ function process_route(argv) {
 
   remote = new arango.Connection(files[files.length-1]);
 
-  if(options.list) {
+  if(options.view) {
     remote.admin.routes(function(err,ret){
       if(err) error("Failed to list routes: " + ret);
       delete ret.error;
@@ -716,11 +716,11 @@ function process_route(argv) {
   } else if(options.id){
     remote.document.get(options.id,function(err,route){
       if(err) error("Route not found: " + route);
-      if(options.view) {
+      if(options.list) {
         console.log(route);
       } else add_route(remote,options,route);  
     });
-  } else if(options.url || options.action || options.view){
+  } else if(options.url || options.action || options.list){
     remote.simple.list("_routing",{url:true},function(err,ret){
       var url, action, m1, m2;
       if(err) error("List routings failed:" + ret);
@@ -736,7 +736,7 @@ function process_route(argv) {
           m1 = url && url.indexOf(options.url) >= 0;
           m2 = action && action.indexOf(options.action) >=0;  
           if((url && action && m1 && m2)||(url&&!action&&m1)||(!url&&action&&m2) ) {
-            if(!options.view) {
+            if(!options.list) {
               add_route(remote,options,route);
             } else {
               console.log(route);
@@ -745,7 +745,7 @@ function process_route(argv) {
           } 
         });
         if(!matched&&!options.remove){
-          if(!options.view) {
+          if(!options.list) {
             add_route(remote,options,null);
           } else if(!options.url&&!options.action){
             console.log(ret.result);

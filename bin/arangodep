@@ -409,13 +409,15 @@ function process_store(argv) {
   }
 
   function read_local_write_remote(source,dest,remote,expiry) {
-    var data, bin;
+    var data, bin, extended = {};
     try {
       data = fs.readFileSync(source);
     } catch(err) { error("Failed to read file:", err.message) } 
 
     bin = isBinary(data,source);
-    remote.key.put(dest, {expires:expiry,extended:{contentType: mime.lookup(source)}}, 
+    extended.contentType = mime.lookup(source);
+    if(bin) extended["contentEncoding"] = "base64";
+    remote.key.put(dest, {expires:expiry,extended:extended}, 
           bin ? data.toString('base64') : data, function(err,ret) {
             if(err) error("Failed to deploy " + source + ": " + ret);
             else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", source, data.length);  

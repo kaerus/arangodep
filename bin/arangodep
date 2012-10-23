@@ -444,6 +444,7 @@ function process_module(argv) {
     console.log("-l --list".pad(16),"List modules");
     console.log("-v --view".pad(16),"View module");
     console.log("-s --search".pad(16),"Search modules");
+    console.log("-f --force".pad(16),"Force with errors");
     console.log("-d --delete".pad(16),"Delete module");
     process.exit(0);
   }
@@ -483,6 +484,10 @@ function process_module(argv) {
       case '-a':
       case '--autoload':
         options.autoload = argv[++i] === 'true' ? true : false;
+        break;  
+      case '-f':
+      case '--force':
+        options.force = true;
         break;  
       default:
         files.push(argv[i]);
@@ -546,7 +551,7 @@ function process_module(argv) {
         if(remote.basedir)
           dest = remote.basedir + '/' + path.basename(dest);
         else dest = options.path;
-        read_local_write_remote(source,dest,remote,options.autoload); 
+        read_local_write_remote(source,dest,remote,options); 
       }
     }
   });
@@ -584,7 +589,7 @@ function process_module(argv) {
     }    
   }
 
-  function read_local_write_remote(source,dest,remote,autoload){
+  function read_local_write_remote(source,dest,remote,options){
     var ESparser = require('esprima'), syntax, _module;
 
     try {
@@ -598,13 +603,16 @@ function process_module(argv) {
     try {
       syntax = ESparser.parse(data);
     } catch(e) {
-      error("Module contained errors: " + JSON.stringify(e,null,2));
+      if(options.force) {
+        syntax = JSON.stringify(e,null,2);
+        console.log("Warning: Deploying with validation errors at", syntax);
+      } else error("Module contained errors at " + syntax);
     }
     /* todo: analyse syntax */
 
     _module = {path:dest,content:data};
-    if(autoload) _module.autoload = true;
-    else if(autoload === false) _module.autoload = false;
+    if(options.autoload) _module.autoload = true;
+    else if(options.autoload === false) _module.autoload = false;
 
     /* check if module exists */
     remote.simple.first("_modules",{path:dest},function(err,ret){

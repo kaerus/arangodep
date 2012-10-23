@@ -511,7 +511,7 @@ function process_module(argv) {
     } else {
       if (options.remove) {
         if(!options.path && !options.id)
-          error("Module path or id missing");
+          error("Module path or id missing.");
         if(options.id){
           remote.document.delete(options.id,function(err,ret){
             if(err) error("Failed to delete " + options.id + ": " + ret);
@@ -534,7 +534,7 @@ function process_module(argv) {
             });
           } else {
             remote.simple.list("_modules",{path:remote.basedir},function(err,ret){
-              if(err) error("Modules not found" + ret);
+              if(err) error("Modules not found: " + ret);
               ret.result.forEach(function(module){
                print_module_if(module,remote.basedir,options.path,options.view);   
               });
@@ -542,7 +542,7 @@ function process_module(argv) {
           }    
       } else { 
         if(!options.path && !remote.basedir)
-          error("Module path option missing");
+          error("Module path option missing.");
         if(remote.basedir)
           dest = remote.basedir + '/' + path.basename(dest);
         else dest = options.path;
@@ -585,14 +585,21 @@ function process_module(argv) {
   }
 
   function read_local_write_remote(source,dest,remote,autoload){
-    var _module;
+    var ESparser = require('esprima'), _module;
 
     try {
       data = fs.readFileSync(source).toString();
-    } catch(err) { error("Failed to read file:",err.message); }
+    } catch(err) { error("Failed to read file: ",err.message); }
 
     if(isBinary(data,source)) 
       error("Binary modules are not allowed");
+
+    /* catch syntax errors */
+    try {
+      ESparser.parse(data);
+    } catch(e) {
+      error("Module contained errors: " + JSON.stringify(e,null,2));
+    }
 
     _module = {path:dest,content:data};
     if(autoload) _module.autoload = true;

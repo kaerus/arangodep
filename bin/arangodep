@@ -385,9 +385,6 @@ function process_store(argv) {
         /* uri encode spaces since arangodb can't handle that */
         destfile = destfile.replace(' ','%20');
 
-        if(!(typeof options.expiry === 'object'))
-          error("expiry date missing");
-
         read_local_write_remote(source,destfile,remote,options.expiry);  
       }
     }  
@@ -409,7 +406,7 @@ function process_store(argv) {
   }
 
   function read_local_write_remote(source,dest,remote,expiry) {
-    var data, bin, extended = {};
+    var data, bin, extended = {}, options = {};
     try {
       data = fs.readFileSync(source);
     } catch(err) { error("Failed to read file:", err.message) } 
@@ -417,7 +414,9 @@ function process_store(argv) {
     bin = isBinary(data,source);
     extended.contentType = mime.lookup(source);
     if(bin) extended["contentEncoding"] = "base64";
-    remote.key.put(dest, {expires:expiry,extended:extended}, 
+    if(typeof expiry === 'object') options.expires = expiry;
+    options.extended = extended;
+    remote.key.put(dest, options, 
           bin ? data.toString('base64') : data, function(err,ret) {
             if(err) error("Failed to deploy " + source + ": " + ret);
             else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", source, data.length);  
@@ -856,12 +855,12 @@ function process_route(argv) {
 /* deploy application */
 function process_app(argv) {
   var command = argv.shift()
-    , options = {}
-    , files = [];
+    , options = {modules:[], routes:[], store: []}
+    , files = [], sourcedir, remotehost, manifest;
 
   function help() {
     console.log("Deploy application");
-    console.log("Command:", program + ' ' + command + " <options> <sources> <destination>");
+    console.log("Command:", program + ' ' + command + " <options> <source> <destination>");
     console.log("Options:");
     process.exit(0);
   }
@@ -875,23 +874,59 @@ function process_app(argv) {
         help();
         break;
       case '-m':
-      case '--manifest':
-        options.manifest = argv[++i];
-        break;  
+      case '--module':
+        options.modules.push(argv[++i].split(' '));
+        break;
+      case '-r':
+      case '--route':
+        options.routes.push(argv[++i].split(' '));
+        break;   
+      case '-s':
+      case '--store':
+        options.store = argv[++i].split(' '); 
+        break;    
       default:
         files.push(argv[i]);
         break;
     }
   }
 
-  processFiles(files,function(source,destination,remote,toLocal){
-    
-    if(toLocal) {
-      console.log("Download %s to %s", source, destination);
-    } else {  
-      console.log("Deploy %s to %s", source, destination);
+  sourcedir = files[0];
+  remotehost = files[1];
 
+  try {
+    stat = fs.statSync(sourcedir);
+  } catch(err) { 
+    error("Failed to read " + sourcedir + ": " + err.message ); 
+  }  
+    
+  options.modules.forEach(function(module){
+    module.unshift("module");
+    module.push(remotehost);
+    try{
+        process_module.apply(null,module);
+    } catch (err) {
+      error("Failed to process module: " + err.message);
     }
   });
+
+ options.routes.forEach(function(route){
+    route.unshift("route");
+    route.push(remotehost);
+    try{
+        process_route.apply(null,route);
+    } catch (err) {
+      error("Failed to process route: " + err.message);
+    }
+  });
+
+  try{
+    options.store.unshift("store");
+    options.store.push(sourcedir);
+    options.store.push(remotehost);
+    process_store.call(null,options.store);
+  } catch (err) {
+    error("Failed to process store: " + err.message);
+  }
   
 } /* end of process_application */

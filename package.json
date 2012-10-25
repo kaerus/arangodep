@@ -1,6 +1,6 @@
 {
   "name": "arangodep",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "ArangoDB deployment tool",
   "keywords": [
     "arango client",
@@ -16,7 +16,7 @@
     "anders elo <anders@kaerus.com>"
   ],
   "dependencies": {
-  	"arango.client":">=0.5.4",
+    "arango.client": "git://github.com/kaerus/arango-client.git",
     "mime":">=1.2.7",
     "node-fs":">=0.1.4" ,
     "esprima":">=1.0.0"

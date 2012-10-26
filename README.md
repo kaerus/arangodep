@@ -13,12 +13,15 @@ Usage
 -----
 Execute ```arangodep``` to see command options.
 ```
-Arango deployment tools v0.3.5 by Anders Elo <anders @ kaerus com>.
+ArangoDB deployment tool version 0.4.3
+Created by Kaerus (undefined) <mail://contact@kaerus.com>
+Contributors: 
+  [object Object]
 Commands:
-           store: deploy files as key-values
-          module: deploy files as modules
-           route: manipulates routing
-           dummy: crash test dummy
+             app: deploy application
+           store: key-value file store
+          module: deploy modules
+           route: configure routing
 type 'arangodep <command> --help' for more information.
 ```
 
@@ -27,6 +30,46 @@ Warning: this tool can ruin you database, use with caution!
 
 Examples
 ========
+arangodep app
+-------------
+Deploy application
+```
+Command: arangodep app <options>
+options          arguments        description
+-h --help                         Shows this help
+-c --create      <app>            Create application stub
+-n --name        <name>           Set or change name
+-a --add         <file|directory> Add file
+-r --remote      <remote>         Set remote (http://hostname/collection:basedir)
+-i --init                         Initialize remote
+-f --force                        Force update
+```
+The create option generates an applicaton skeleton in the specified directory.
+```
+$ arangodep app --create my_application
+$ cd my_application
+```
+Specify the remote before deploying the application.
+```
+$ arangodep app --remote http://localhost:8529/repo:my_application
+```
+
+To add new files use the --add option
+```
+$ arangodep app --add ./actions/controller.js
+```
+
+Update the remote using the --push option. Add --init to initialize the remote.
+```
+$ arangodep app --push --init
+```
+
+You may also try to force an update using the --force option
+```
+$ arangodep app --push --force
+```
+
+
 
 arangodep route
 ---------------

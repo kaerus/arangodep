@@ -22,11 +22,10 @@ var arango = require('arango.client')
   , path = require('path')
   , fs = require('node-fs')
   , deploy = {
-      store: {command: process_store, brief: "deploy files as key-values"},
-      module: {command: process_module, brief: "deploy files as modules"},
-      route: {command: process_route, brief: "manipulates routing"},
       app: {command: process_app, brief: "deploy application"},
-      dummy: {command: process_dummy, brief: "crash test dummy"}
+      store: {command: process_store, brief: "key-value file store"},
+      module: {command: process_module, brief: "deploy modules"},
+      route: {command: process_route, brief: "configure routing"}
     }, program, program_path, error
   , PSEP = process.platform === 'win32' ? '\\' : '/'
   , package = require("../package");
@@ -1077,7 +1076,7 @@ function process_app(argv) {
     if(!remote){
       error("Unspecified or invalid remote " + index.remote);
     }
-
+  
     /* check for existing */
     remote.simple.first({"$key":remote.basedir+'/.index'}).on('result',function(res){
       var remote_index = JSON.parse(res.document["$value"]);
@@ -1090,7 +1089,7 @@ function process_app(argv) {
     }).on('error',function(err){
       /* create new */
       if(options.init||options.force) {
-        push_index(basedir,remote,options.init ? {create:true} : undefined);
+        push_index(base,remote,options.init ? {create:true} : undefined);
       } else error("Error on remote " + index.remote + ": " + err.message);    
     });
   }
@@ -1122,38 +1121,44 @@ function process_app(argv) {
   }
 
   function push_index(basedir,remote,options) {
-    var data, bin, extended = {};
-
     options = options || {};
        
     if(options.create) {
       remote.collection.create().on('error', function(err){
         error("Create failed: " + err.message);
-      }).on('result',push_remote);
-    } else push_remote();    
+      }).on('result',store_index);
+    } else store_index();    
 
-    function push_remote() {
+    function store_index() {
+      var extended = {};
+
       extended.contentType = mime.lookup('.json');
       remote.key.put(remote.basedir+'/.index',{extended:extended}, index, function(err,ret){
         if(err) error("Failed to write .index: " + ret);
         else {
           console.log("Updated .index");
           index.files.forEach(function(file){
-            try {
-              data = fs.readFileSync(basedir+'/'+file);
-            } catch(err) { error("Failed to read: " + err.message) } 
-
-            bin = isBinary(data,file);
-            extended.contentType = mime.lookup(file);
-            if(bin) extended["contentEncoding"] = "base64";
-            remote.key.put(remote.basedir+file, {extended:extended}, 
-              bin ? data.toString('base64') : data, function(err,ret) {
-                if(err) error("Failed to deploy " + source + ": " + ret);
-                else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", source, data.length);  
-            });
+            store_file(file);
           });
         }
       }); 
+    }
+
+    function store_file(file) {
+      var data, bin, extended = {};
+      
+      try {
+        data = fs.readFileSync(basedir+'/'+file);
+      } catch(err) { error("Failed to read: " + err.message) } 
+
+      bin = isBinary(data,file);
+      extended.contentType = mime.lookup(file);
+      if(bin) extended["contentEncoding"] = "base64";
+      remote.key.put(remote.basedir+'/'+file, {extended:extended}, 
+        bin ? data.toString('base64') : data, function(err,ret) {
+          if(err) error("Failed to deploy " +file + ": " + ret);
+          else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", file, data.length);  
+      });
     }
   }
 /*

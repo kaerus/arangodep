@@ -903,8 +903,16 @@ function process_app(argv) {
 
   function help() {
     console.log("Deploy application");
-    console.log("Command:", program + ' ' + command + " <options> <source> <destination>");
-    console.log("Options:");
+    console.log("Command:", program + ' ' + command + " <options>");
+    console.log("options".pad(16),"arguments".pad(16),"description");
+    console.log("-h --help".pad(16),"".pad(16),"Shows this help" );
+    console.log("-c --create".pad(16),"<app>".pad(16),"Create application stub");
+    console.log("-n --name".pad(16),"<name>".pad(16),"Set or change name"); 
+    console.log("-a --add".pad(16),"<file|directory>".pad(16),"Add file");
+    console.log("-r --remote".pad(16),"<remote>".pad(16),"Set remote (http://hostname/collection:basedir)");
+    console.log("-i --init".pad(16),"".pad(16),"Initialize remote");
+    console.log("-f --force".pad(16),"".pad(16),"Force update");
+
     process.exit(0);
   }
 
@@ -923,11 +931,7 @@ function process_app(argv) {
       case '-r':
       case '--route':
         options.routes.push(argv[++i].split(' '));
-        break;   
-      case '-s':
-      case '--store':
-        options.store = argv[++i].split(' '); 
-        break;  
+        break;    
       case '-c':
       case '--create':
         options.create = true;
@@ -938,7 +942,7 @@ function process_app(argv) {
         break;  
       case '-a':
       case '--add':
-        options.add = argv[++i];
+        options.add = true;
         break;  
       case '-p':
       case '--push':
@@ -1025,6 +1029,7 @@ function process_app(argv) {
       else basedir += '../';  
     }
   } 
+  basedir = path.resolve(basedir);
 
   if(!index){
     error("Failed to locate .index");
@@ -1032,6 +1037,7 @@ function process_app(argv) {
 
   if(options.add) {
     var source = files.shift();
+    console.log("adding ", source);
     try {
       stat = fs.statSync(source);
     } catch (err) {
@@ -1040,17 +1046,24 @@ function process_app(argv) {
 
     /* todo: refactor */
     if(stat.isDirectory()){
-      traverseFiles(sourcedir,function(file){
+      var subdir = path.relative(basedir,path.resolve(path.dirname(source)));
+      traverseFiles(source,function(file){
         index.paths.push(path.dirname(file));
         index.files.push(file);
-      },"");
+      },subdir);
     } else if(stat.isFile()){
-      index.paths.push(path.dirname(source));
-      index.files.push(source);
+      var relpath = path.relative(basedir,path.resolve(source));
+      index.paths.push(path.dirname(relpath));
+      index.files.push(relpath);
     } else {
-      error("Can not handle " + sourcedir);
+      error("Can not handle " + source);
     }
     update_index(basedir); 
+  }
+
+  if(options.name) {
+    index.name = options.name;
+    update_index(basedir);
   }
 
   if(options.remote) {
@@ -1068,7 +1081,7 @@ function process_app(argv) {
     /* check for existing */
     remote.simple.first({"$key":remote.basedir+'/.index'}).on('result',function(res){
       var remote_index = JSON.parse(res.document["$value"]);
-      if(remote_index.created === index.created) {
+      if(!options.force && remote_index.updated === index.updated) {
         console.log("Already upto date");
       } else {
           /* update */
@@ -1090,7 +1103,7 @@ function process_app(argv) {
         fs.writeFileSync(sourcedir+PSEP+index.files[i-1], data, encoding);
         console.log(file);
       } catch(err) {
-        error("Failed to read or create " + file + ": " + err.message);
+        error("Failed to write: " + err.message);
       }
   }
 
@@ -1127,8 +1140,8 @@ function process_app(argv) {
           console.log("Updated .index");
           index.files.forEach(function(file){
             try {
-              data = fs.readFileSync(basedir+file);
-            } catch(err) { error("Failed to read " + file + ": " + err.message) } 
+              data = fs.readFileSync(basedir+'/'+file);
+            } catch(err) { error("Failed to read: " + err.message) } 
 
             bin = isBinary(data,file);
             extended.contentType = mime.lookup(file);
@@ -1143,7 +1156,7 @@ function process_app(argv) {
       }); 
     }
   }
-
+/*
   options.modules.forEach(function(module){
     module.unshift("module");
     module.push(remotehost);
@@ -1153,7 +1166,8 @@ function process_app(argv) {
       error("Failed to process module: " + err.message);
     }
   });
-
+*/
+/*
  options.routes.forEach(function(route){
     route.unshift("route");
     route.push(remotehost);
@@ -1163,15 +1177,6 @@ function process_app(argv) {
       error("Failed to process route: " + err.message);
     }
   });
-
-/*
-  try{
-    options.store.unshift("store");
-    options.store.push(sourcedir);
-    options.store.push(remotehost);
-    process_store.call(null,options.store);
-  } catch (err) {
-    error("Failed to process store: " + err.message);
-  }
 */
+
 } /* end of process_application */

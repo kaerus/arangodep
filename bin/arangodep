@@ -938,7 +938,23 @@ function process_app(argv) {
         break;  
       case '-a':
       case '--add':
-        options.add = true;
+        options.add = argv[++i];
+        break;  
+      case '-p':
+      case '--push':
+        options.push = true;
+        break;
+      case '-i':
+      case '--init':
+        options.init = true;
+        break;  
+      case '-r':
+      case '--remote':
+        options.remote = argv[++i];
+        break;
+      case '-f':
+      case '--force':
+        options.force = true;
         break;  
       default:
         files.push(argv[i]);
@@ -949,7 +965,7 @@ function process_app(argv) {
   /* creates application stub */
   if(options.create) {
     var sourcedir = files.shift();
-    index = { remote:files.shift()||"",
+    index = { remote:options.remote,
                     name:options.name||path.basename(sourcedir),
                     type:"web",
                     language:"js",
@@ -993,10 +1009,26 @@ function process_app(argv) {
     console.log();
     console.log("Generating files");
     /* write application file stubs */
-    write_file_with_index('public/index.html', "<!-- "+banner+" -->\n"+package.stubs.index);
-    write_file_with_index('public/css/stylesheet.css',"/* "+banner+" */\n"+package.stubs.stylesheet);
+    write_file('public/index.html', "<!-- "+banner+" -->\n"+package.stubs.index);
+    write_file('public/css/stylesheet.css',"/* "+banner+" */\n"+package.stubs.stylesheet);
     update_index(sourcedir);  
+    error("done.",0);
   }          
+
+  /* locate .index */
+  var basedir = './', down = 6;
+  while(down-- && !index) {
+    try {
+      index = JSON.parse(fs.readFileSync(basedir+'.index'));
+    } catch (err) {
+      if(basedir === './') basedir = '../';
+      else basedir += '../';  
+    }
+  } 
+
+  if(!index){
+    error("Failed to locate .index");
+  }  
 
   if(options.add) {
     var source = files.shift();
@@ -1005,21 +1037,6 @@ function process_app(argv) {
     } catch (err) {
       error("Failed to read " + source + ": " + err.message);
     }
-
-    /* locate .index */
-    var basedir = './', down = 6;
-    while(down-- && !index) {
-      try {
-        index = JSON.parse(fs.readFileSync(basedir+'.index'));
-      } catch (err) {
-        if(basedir === './') basedir = '../';
-        else basedir += '../';  
-      }
-    } 
-
-    if(!index){
-      error("Failed to locate .index");
-    }  
 
     /* todo: refactor */
     if(stat.isDirectory()){
@@ -1036,7 +1053,36 @@ function process_app(argv) {
     update_index(basedir); 
   }
 
-  function write_file_with_index(file,data,encoding) {
+  if(options.remote) {
+    index.remote = options.remote;
+    update_index(basedir);
+  }
+
+  if(options.push) {
+    var remote = arangoConnection(index.remote);
+    
+    if(!remote){
+      error("Unspecified or invalid remote " + index.remote);
+    }
+
+    /* check for existing */
+    remote.simple.first({"$key":remote.basedir+'/.index'}).on('result',function(res){
+      var remote_index = JSON.parse(res.document["$value"]);
+      if(remote_index.created === index.created) {
+        console.log("Already upto date");
+      } else {
+          /* update */
+        push_index(basedir,remote);
+      }
+    }).on('error',function(err){
+      /* create new */
+      if(options.init||options.force) {
+        push_index(basedir,remote,options.init ? {create:true} : undefined);
+      } else error("Error on remote " + index.remote + ": " + err.message);    
+    });
+  }
+
+  function write_file(file,data,encoding) {
       encoding = typeof encoding !== 'undefined' ? encoding  : 'utf8';
 
       var i = index.files.push(file);
@@ -1061,7 +1107,43 @@ function process_app(argv) {
       error("Failed to update .index: " + err.message);
     }
   }
-    
+
+  function push_index(basedir,remote,options) {
+    var data, bin, extended = {};
+
+    options = options || {};
+       
+    if(options.create) {
+      remote.collection.create().on('error', function(err){
+        error("Create failed: " + err.message);
+      }).on('result',push_remote);
+    } else push_remote();    
+
+    function push_remote() {
+      extended.contentType = mime.lookup('.json');
+      remote.key.put(remote.basedir+'/.index',{extended:extended}, index, function(err,ret){
+        if(err) error("Failed to write .index: " + ret);
+        else {
+          console.log("Updated .index");
+          index.files.forEach(function(file){
+            try {
+              data = fs.readFileSync(basedir+file);
+            } catch(err) { error("Failed to read " + file + ": " + err.message) } 
+
+            bin = isBinary(data,file);
+            extended.contentType = mime.lookup(file);
+            if(bin) extended["contentEncoding"] = "base64";
+            remote.key.put(remote.basedir+file, {extended:extended}, 
+              bin ? data.toString('base64') : data, function(err,ret) {
+                if(err) error("Failed to deploy " + source + ": " + ret);
+                else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", source, data.length);  
+            });
+          });
+        }
+      }); 
+    }
+  }
+
   options.modules.forEach(function(module){
     module.unshift("module");
     module.push(remotehost);

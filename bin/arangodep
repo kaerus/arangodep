@@ -70,6 +70,22 @@ String.prototype.pad = function(justify,chr) {
   return str.join('');
 }
 
+/* returns unique array */
+Array.prototype.unique = function() {
+  var o = {}, i, l = this.length, r = [];
+  for(i=0; i<l; i++) o[this[i]] = this[i];
+  for(i in o) r.push(o[i]);
+  return r;
+};
+
+/* apply replace on array */
+Array.prototype.replaceString = function(r,w) {
+  for(var l = this.length; l > 0; l--) {
+    if(typeof this[l-1] === 'string')
+      this[l-1] = this[l-1].replace(r,w);
+  }  
+}
+
 function error(msg,code) {
   console.error(msg);
   process.exit(code||-1);
@@ -881,7 +897,9 @@ function process_route(argv) {
 function process_app(argv) {
   var command = argv.shift()
     , options = {modules:[], routes:[], store: []}
-    , files = [], sourcedir, remotehost, application; 
+    , files = [], sourcedir, remotehost, destdir, index
+    , now = new Date().toISOString()
+    , banner = program + " v" + package.version + " " + now;
 
   function help() {
     console.log("Deploy application");
@@ -918,29 +936,29 @@ function process_app(argv) {
       case '--name':
         options.name = argv[++i];
         break;  
+      case '-a':
+      case '--add':
+        options.add = true;
+        break;  
       default:
         files.push(argv[i]);
         break;
     }
   }
 
-  sourcedir = files[0];
-  remotehost = files[1];
-
   /* creates application stub */
   if(options.create) {
-    var now = new Date().toISOString()
-      , banner = program + " v" + package.version + " " + now;
-    application = { remote:remotehost||"",
+    var sourcedir = files.shift();
+    index = { remote:files.shift()||"",
                     name:options.name||path.basename(sourcedir),
                     type:"web",
                     language:"js",
-                    created: now,
                     paths:[],
-                    files:[]
+                    files:[],
+                    created: now
                   };
 
-    application.paths = [
+    index.paths = [
       "/actions",        
       "/public",
       "/public/css",
@@ -949,47 +967,99 @@ function process_app(argv) {
 
     try {
       stat = fs.statSync(sourcedir);
-      error("Application directory is not empty!");
-    } catch(err) { 
-      console.log("Creating application stub");
-      var destdir;
-
-      application.paths.forEach(function(file) {
-        try {
-          var destdir = sourcedir+file;
-          fs.statSync(destdir);
-        } catch(err) { 
-          fs.mkdirSync(destdir,0777, true);
-          console.log(destdir);
-        }
-      });
-      console.log();
-      console.log("Generating files");
-      /* write application file stubs */
-      write_file_with_index('public/index.html', "<!-- "+banner+" -->\n"+package.stubs.index);
-      write_file_with_index('public/css/stylesheet.css',"/* "+banner+" */\n"+package.stubs.stylesheet);
-
-      /* create index */
-      try {
-        application.files.unshift('.application');
-        fs.writeFileSync(sourcedir+PSEP+'.application', JSON.stringify(application, null, 2));
-        console.log(".application");
+    } catch(err) {
+      try{
+        fs.mkdirSync(sourcedir);
       } catch (err) {
-        error("Failed to create .application: " + err.message);
-      }  
+        error("Failed to create " + sourcedir + ": " + err.message);
+      }
     }
+    /* check if sourcedir is empty */
+    if(fs.readdirSync(sourcedir).length > 0)
+      error("Application directory is not empty!");
+
+    console.log("Creating application stub");
+    var destdir;
+
+    index.paths.forEach(function(file) {
+      try {
+        var destdir = sourcedir+file;
+        fs.statSync(destdir);
+      } catch(err) { 
+        fs.mkdirSync(destdir,0777, true);
+        console.log(destdir);
+      }
+    });
+    console.log();
+    console.log("Generating files");
+    /* write application file stubs */
+    write_file_with_index('public/index.html', "<!-- "+banner+" -->\n"+package.stubs.index);
+    write_file_with_index('public/css/stylesheet.css',"/* "+banner+" */\n"+package.stubs.stylesheet);
+    update_index(sourcedir);  
   }          
+
+  if(options.add) {
+    var source = files.shift();
+    try {
+      stat = fs.statSync(source);
+    } catch (err) {
+      error("Failed to read " + source + ": " + err.message);
+    }
+
+    /* locate .index */
+    var basedir = './', down = 6;
+    while(down-- && !index) {
+      try {
+        index = JSON.parse(fs.readFileSync(basedir+'.index'));
+      } catch (err) {
+        if(basedir === './') basedir = '../';
+        else basedir += '../';  
+      }
+    } 
+
+    if(!index){
+      error("Failed to locate .index");
+    }  
+
+    /* todo: refactor */
+    if(stat.isDirectory()){
+      traverseFiles(sourcedir,function(file){
+        index.paths.push(path.dirname(file));
+        index.files.push(file);
+      },"");
+    } else if(stat.isFile()){
+      index.paths.push(path.dirname(source));
+      index.files.push(source);
+    } else {
+      error("Can not handle " + sourcedir);
+    }
+    update_index(basedir); 
+  }
 
   function write_file_with_index(file,data,encoding) {
       encoding = typeof encoding !== 'undefined' ? encoding  : 'utf8';
 
-      var i = application.files.push(file);
+      var i = index.files.push(file);
       try{
-        fs.writeFileSync(sourcedir+PSEP+application.files[i-1], data, encoding);
+        fs.writeFileSync(sourcedir+PSEP+index.files[i-1], data, encoding);
         console.log(file);
       } catch(err) {
         error("Failed to read or create " + file + ": " + err.message);
       }
+  }
+
+  function update_index(dir){
+    index.files.replaceString(/^[.\/]*/,'');
+    index.paths.replaceString(/^[.\/]*/,'');
+    index.files = index.files.unique();
+    index.paths = index.paths.unique();
+    index.updated = now;
+    /* create index */
+    try {     
+      fs.writeFileSync(dir+PSEP+'.index', JSON.stringify(index, null, 2));
+    } catch (err) {
+      error("Failed to update .index: " + err.message);
+    }
   }
     
   options.modules.forEach(function(module){
@@ -1012,6 +1082,7 @@ function process_app(argv) {
     }
   });
 
+/*
   try{
     options.store.unshift("store");
     options.store.push(sourcedir);
@@ -1020,5 +1091,5 @@ function process_app(argv) {
   } catch (err) {
     error("Failed to process store: " + err.message);
   }
-  
+*/
 } /* end of process_application */

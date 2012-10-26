@@ -1,6 +1,6 @@
 {
   "name": "arangodep",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "ArangoDB deployment tool",
   "keywords": [
     "arango client",
@@ -21,6 +21,10 @@
     "node-fs":">=0.1.4" ,
     "esprima":">=1.0.0"
   },
+  "directories": {
+    "bin":"./bin",
+    "conf":"./conf"
+  },
   "bin": "./bin/arangodep",
   "bugs": {
     "url": "https://github.com/kaerus/arangodep/issues"
@@ -29,6 +33,9 @@
     "type": "git",
     "url": "git://github.com/kaerus/arangodep.git"
   },
-  "main": "index.js",
-  "license": "APACHE2.0"
+  "license": "APACHE2.0",
+  "stubs": {
+    "index": "<!doctype html>\n<html lang='en'>\n<head>\n  <meta charset='utf-8' />\n  <title>Arango Application</title>\n  <link rel='stylesheet' href='css/stylesheet.css' />\n</head>\n<body>\n  <h1>Welcome to Arango</h1>\n</body>\n</html>\n",
+    "stylesheet": "* {margin:0;padding:0}\n"
+  } 
 }

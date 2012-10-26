@@ -46,7 +46,7 @@ function help() {
   Object.keys(deploy).forEach(function(command){
     console.log("%s:",command.pad(-16),deploy[command].brief)
   });
-  console.log("type 'arangodep <command> --help' for more information.");
+  console.log("type '" + program + " <command> --help' for more information.");
   process.exit(0);
 }  
 
@@ -910,10 +910,14 @@ function process_app(argv) {
       case '--store':
         options.store = argv[++i].split(' '); 
         break;  
-      case '-n':
-      case '--new':
-        options.new = true;
+      case '-c':
+      case '--create':
+        options.create = true;
         break;    
+      case '-n':
+      case '--name':
+        options.name = argv[++i];
+        break;  
       default:
         files.push(argv[i]);
         break;
@@ -923,33 +927,69 @@ function process_app(argv) {
   sourcedir = files[0];
   remotehost = files[1];
 
-  if(options.new) {
-    /* todo: create stubs for other types of apps */
-    index = {remote:remotehost,type:"web",language:"js",paths:[],files:[]};
-      index.paths = [
-        "/actions",
-        "/public",
-        "/public/html",
-        "/public/css",
-        "/public/js"
-      ];
-    };
-   try {
+  /* creates application stub */
+  if(options.create) {
+
+    index = { remote:remotehost,
+              name:options.name,
+              type:"web",
+              language:"js",
+              paths:[],
+              files:[]
+            };
+
+    index.paths = [
+      "/actions",        
+      "/public",
+      "/public/css",
+      "/public/js"
+    ]; 
+
+    try {
       stat = fs.statSync(sourcedir);
-      error("Application directory is not empty.");
-  } catch(err) { 
-      console.log("Creating application stub.");
+      error("Application directory is not empty!");
+    } catch(err) { 
+      console.log("Creating application stub");
       var destdir;
+
       index.paths.forEach(function(file) {
         try {
           var destdir = sourcedir+file;
           fs.statSync(destdir);
         } catch(err) { 
           fs.mkdirSync(destdir,0777, true);
-          console.log("Created directory", destdir);
+          console.log(destdir);
         }
       });
-  }        
+      console.log();
+      console.log("Generating files");
+      var banner = program + " v" + package.version + " " + new Date().toISOString();
+      /* write application file stubs */
+      write_file_with_index('public/index.html', "<!-- "+banner+" -->\n"+package.stubs.index);
+      write_file_with_index('public/css/stylesheet.css',"/* "+banner+" */\n"+package.stubs.stylesheet);
+
+      /* create index */
+      try{
+        index.files.unshift('.index');
+        fs.writeFileSync(sourcedir+PSEP+'.index', JSON.stringify(index, null, 2));
+        console.log(".index");
+      } catch (err) {
+        error("Failed to create .index: " + err.message);
+      }  
+    }
+  }          
+
+  function write_file_with_index(file,data,encoding) {
+      encoding = typeof encoding !== 'undefined' ? encoding  : 'utf8';
+
+      var i = index.files.push(file);
+      try{
+        fs.writeFileSync(sourcedir+PSEP+index.files[i-1], data, encoding);
+        console.log(file);
+      } catch(err) {
+        error("Failed to read or create " + file + ": " + err.message);
+      }
+  }
     
   options.modules.forEach(function(module){
     module.unshift("module");

@@ -924,10 +924,10 @@ function process_app(argv) {
   remotehost = files[1];
 
   if(options.new) {
-    index = {remote:remotehost,paths:[],files:[]};
+    /* todo: create stubs for other types of apps */
+    index = {remote:remotehost,type:"web",language:"js",paths:[],files:[]};
       index.paths = [
-        "/modules",
-        "/routes",
+        "/actions",
         "/public",
         "/public/html",
         "/public/css",

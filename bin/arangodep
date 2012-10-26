@@ -36,11 +36,7 @@ program = package.name;
 
 function help() {
   console.log(package.description + " version " + package.version);
-  console.log("Created by " + package.author.name + " (" + package.author.web + ") <mail://" + package.author.email +">");
-  console.log("Contributors: ");
-  package.contributors.forEach(function(contributor) {
-    console.log("\t"+contributor);
-  });
+  console.log("Created by " + package.author.name + " <"+package.author.email+">");
   console.log("Commands:");
   Object.keys(deploy).forEach(function(command){
     console.log("%s:",command.pad(-16),deploy[command].brief)
@@ -1146,7 +1142,7 @@ function process_app(argv) {
 
     function store_file(file) {
       var data, bin, extended = {};
-      
+
       try {
         data = fs.readFileSync(basedir+'/'+file);
       } catch(err) { error("Failed to read: " + err.message) } 

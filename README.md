@@ -14,9 +14,7 @@ Usage
 Execute ```arangodep``` to see command options.
 ```
 ArangoDB deployment tool version 0.4.3
-Created by Kaerus (undefined) <mail://contact@kaerus.com>
-Contributors: 
-  [object Object]
+Created by Kaerus <contact@kaerus.com>
 Commands:
              app: deploy application
            store: key-value file store

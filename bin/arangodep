@@ -29,14 +29,19 @@ var arango = require('arango.client')
       dummy: {command: process_dummy, brief: "crash test dummy"}
     }, program, program_path, error
   , PSEP = process.platform === 'win32' ? '\\' : '/'
-  , VERSION = require("../package").version;
+  , package = require("../package");
 
 process.argv.shift(); 
 program_path = process.argv.shift();
-program = path.basename(program_path); 
+program = package.name; 
 
 function help() {
-  console.log("Arango deployment tools v"+VERSION+" by Anders Elo <anders @ kaerus com>.");
+  console.log(package.description + " version " + package.version);
+  console.log("Created by " + package.author.name + " (" + package.author.web + ") <mail://" + package.author.email +">");
+  console.log("Contributors: ");
+  package.contributors.forEach(function(contributor) {
+    console.log("\t"+contributor);
+  });
   console.log("Commands:");
   Object.keys(deploy).forEach(function(command){
     console.log("%s:",command.pad(-16),deploy[command].brief)
@@ -288,9 +293,11 @@ function process_store(argv) {
     console.log("Command:", program + ' ' + command + " <options> <sources> <destination>");
     console.log("Options:");
     console.log("-h --help".pad(16),"Shows this help"); 
-    console.log("-p --path".pad(16),"Files path");
     console.log("-e --expiry".pad(16),"Set Expiry date 'yyyy-mm-dd HH:MM:SS'");
     console.log("-l --list".pad(16),"List files");
+    console.log("-p --path".pad(16),"Files path");
+    console.log("-c --create".pad(16),"Create collection");
+    console.log("-o --options".pad(16),"Collection options");
     console.log("-d --delete".pad(16),"Delete files");
     process.exit(0);
   }
@@ -323,6 +330,14 @@ function process_store(argv) {
       case '-d':
       case '--delete':
         options.remove = true;
+        break;  
+      case '-c':
+      case '--create':
+        options.create = true;
+        break;  
+      case '-o':
+      case '--options':
+        options.create_options = JSON.parse(argv[++i]);
         break;  
       default:
         if(argv[i].match(/^--[a-z]+$/)){
@@ -385,7 +400,7 @@ function process_store(argv) {
         /* uri encode spaces since arangodb can't handle that */
         destfile = destfile.replace(' ','%20');
 
-        read_local_write_remote(source,destfile,remote,options.expiry);  
+        read_local_write_remote(source,destfile,remote,options);  
       }
     }  
   });    
@@ -405,22 +420,32 @@ function process_store(argv) {
     });  
   }
 
-  function read_local_write_remote(source,dest,remote,expiry) {
+  function read_local_write_remote(source,dest,remote,options) {
     var data, bin, extended = {}, options = {};
-    try {
-      data = fs.readFileSync(source);
-    } catch(err) { error("Failed to read file:", err.message) } 
+    
+    if(options.create) {
+      console.log("Creating collection ", remote.config.name);
+      remote.collection.create().on('error', function(err){
+        error("Collection create failed: " + err.message);
+      }).on('result',store);
+    } else store();    
 
-    bin = isBinary(data,source);
-    extended.contentType = mime.lookup(source);
-    if(bin) extended["contentEncoding"] = "base64";
-    if(typeof expiry === 'object') options.expires = expiry;
-    options.extended = extended;
-    remote.key.put(dest, options, 
-          bin ? data.toString('base64') : data, function(err,ret) {
-            if(err) error("Failed to deploy " + source + ": " + ret);
-            else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", source, data.length);  
-    });       
+    function store() {
+      try {
+        data = fs.readFileSync(source);
+      } catch(err) { error("Failed to read file:", err.message) } 
+
+      bin = isBinary(data,source);
+      extended.contentType = mime.lookup(source);
+      if(bin) extended["contentEncoding"] = "base64";
+      if(typeof options.expiry === 'object') options.expires = options.expiry;
+      options.extended = extended;
+      remote.key.put(dest, options, 
+            bin ? data.toString('base64') : data, function(err,ret) {
+              if(err) error("Failed to deploy " + source + ": " + ret);
+              else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", source, data.length);  
+      });
+    }  
   }
 } /* end of process_store */
 
@@ -856,7 +881,7 @@ function process_route(argv) {
 function process_app(argv) {
   var command = argv.shift()
     , options = {modules:[], routes:[], store: []}
-    , files = [], sourcedir, remotehost, manifest;
+    , files = [], sourcedir, remotehost, index; 
 
   function help() {
     console.log("Deploy application");
@@ -884,6 +909,10 @@ function process_app(argv) {
       case '-s':
       case '--store':
         options.store = argv[++i].split(' '); 
+        break;  
+      case '-n':
+      case '--new':
+        options.new = true;
         break;    
       default:
         files.push(argv[i]);
@@ -894,11 +923,33 @@ function process_app(argv) {
   sourcedir = files[0];
   remotehost = files[1];
 
-  try {
-    stat = fs.statSync(sourcedir);
+  if(options.new) {
+    index = {remote:remotehost,paths:[],files:[]};
+      index.paths = [
+        "/modules",
+        "/routes",
+        "/public",
+        "/public/html",
+        "/public/css",
+        "/public/js"
+      ];
+    };
+   try {
+      stat = fs.statSync(sourcedir);
+      error("Application directory is not empty.");
   } catch(err) { 
-    error("Failed to read " + sourcedir + ": " + err.message ); 
-  }  
+      console.log("Creating application stub.");
+      var destdir;
+      index.paths.forEach(function(file) {
+        try {
+          var destdir = sourcedir+file;
+          fs.statSync(destdir);
+        } catch(err) { 
+          fs.mkdirSync(destdir,0777, true);
+          console.log("Created directory", destdir);
+        }
+      });
+  }        
     
   options.modules.forEach(function(module){
     module.unshift("module");

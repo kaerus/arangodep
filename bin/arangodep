@@ -902,7 +902,8 @@ function process_app(argv) {
     console.log("-h --help".pad(16),"".pad(16),"Shows this help" );
     console.log("-a --add".pad(16),"<file|directory>".pad(16),"Add file");
     console.log("-r --remote".pad(16),"<remote>".pad(16),"Set remote (http://hostname/collection:basedir)");
-    console.log("-i --init".pad(16),"".pad(16),"Initialize application");
+    console.log("-c --create".pad(16),"".pad(16),"Creates collection");    
+    console.log("-i --init".pad(16),"".pad(16),"Initialize index");
     console.log("-f --force".pad(16),"".pad(16),"Force update");
 
     process.exit(0);
@@ -940,6 +941,10 @@ function process_app(argv) {
       case '--remote':
         options.remote = argv[++i];
         break;
+      case '-c':
+      case '--create':
+        options.create = true;
+        break;  
       case '-f':
       case '--force':
         options.force = true;
@@ -952,6 +957,11 @@ function process_app(argv) {
 
   var basedir  ='./';
 
+  if(options.init) {
+    if(!index && !options.force) create_index(basedir);
+    else console.log("Index exist, ignoring init");
+  } 
+
   /* locate .index */
   for(var cd = 4; cd && !index; cd--) {
     try {
@@ -961,7 +971,8 @@ function process_app(argv) {
       else basedir += '../';  
     }
   } 
-  if(!index) error("Failed to locate .index");
+  
+  if(!index) error("Local index not present");
   
   basedir = path.resolve(basedir); 
 
@@ -1018,19 +1029,19 @@ function process_app(argv) {
         push_index(basedir,remote,{_id:res._id,_rev:res._rev,created:res.created});
       }
     }).on('error',function(err){
-      if(options.init) push_index(basedir,remote,{create:true});
-      else error("Failed to locate remote .index on " + index.remote + ": " + err.message);    
+      if(options.create) push_index(basedir,remote,{create:true});
+      else error("Failed to locate remote index on " + index.remote + ": " + err.message);    
     });
   }
 
   function create_index(dir) {
     index = {remote:'',paths:{},files:{},created:now}
     try {
-      fs.writeFileSync(dir.PSEP+'.index', JSON.stringify(index,null,2));
+      fs.writeFileSync(dir+PSEP+'.index', JSON.stringify(index,null,2));
     } catch (err) {
       error("Failed to create local index: " + err.message);
     }
-    console.log("Created local index");
+    console.log("Created local index:",dir+PSEP+'.index');
   }
 
   function update_index(dir){
@@ -1061,6 +1072,9 @@ function process_app(argv) {
       if(err) error("Failed to push index: " + ret);
 
       console.log("Pushed index");
+      index._id = ret._id;
+      index._rev = ret._rev;
+
       var files = Object.keys(index.files), files_to_push = files.length;       
       files.forEach(function(file){
         store_file(file,function(ret){

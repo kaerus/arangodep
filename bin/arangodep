@@ -990,7 +990,7 @@ function process_app(argv) {
       traverseFiles(source,function(file){
         relpath = path.relative(basedir,path.resolve(file));
         if(relpath[0]!=='.') {
-          console.log(relpath);
+          console.log("Adding",relpath);
           index.paths[path.dirname(relpath)] = index.paths[path.dirname(relpath)] || 0777;
           index.files[relpath] = index.files[relpath] || {};
         }  
@@ -998,7 +998,7 @@ function process_app(argv) {
     } else if(stat.isFile()){
       relpath = path.relative(basedir,path.resolve(source));
       if(relpath[0]!=='.') {
-        console.log(relpath);
+        console.log("Adding",relpath);
         index.paths[path.dirname(relpath)] = index.paths[path.dirname(relpath)] || 0777;
         index.files[relpath] = index.files[relpath] || {};
       }  
@@ -1020,8 +1020,9 @@ function process_app(argv) {
       error("Invalid remote " + index.remote + ": " + err.message);
     }
   
-    /* check for existing index*/
-    remote.simple.first({file:remote.basedir+'/.index'}).on('result',function(res){
+    /* check for existing index */
+    remote.simple.first({remote:index.remote}).on('result',function(res){
+      /* todo: update & merge with local index */
       if(!options.force && index._rev !== res._rev) {
         console.log("Already upto date");
       } else {

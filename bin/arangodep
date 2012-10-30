@@ -1023,12 +1023,7 @@ function process_app(argv) {
     /* check for existing index */
     remote.simple.first({remote:index.remote}).on('result',function(res){
       /* todo: update & merge with local index */
-      if(!options.force && index._rev !== res._rev) {
-        console.log("Already upto date");
-      } else {
-        console.log("Remote push");
-        push_index(basedir,remote,{_id:res._id,_rev:res._rev,created:res.created});
-      }
+      push_index(basedir,remote,{_id:res._id,_rev:res._rev,created:res.created});
     }).on('error',function(err){
       if(options.create) push_index(basedir,remote,{create:true});
       else error("Failed to locate remote index on " + index.remote + ": " + err.message);    
@@ -1042,7 +1037,7 @@ function process_app(argv) {
     } catch (err) {
       error("Failed to create local index: " + err.message);
     }
-    console.log("Created local index:",dir+PSEP+'.index');
+    console.log("Created local index");
   }
 
   function update_index(dir){
@@ -1072,7 +1067,7 @@ function process_app(argv) {
     function remote_index(err,ret) {
       if(err) error("Failed to push index: " + ret);
 
-      console.log("Pushed index");
+      console.log("Pushed index to remote");
       index._id = ret._id;
       index._rev = ret._rev;
 

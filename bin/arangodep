@@ -900,9 +900,10 @@ function process_app(argv) {
     console.log("Command:", program + ' ' + command + " <options>");
     console.log("options".pad(16),"arguments".pad(16),"description");
     console.log("-h --help".pad(16),"".pad(16),"Shows this help" );
-    console.log("-a --add".pad(16),"<file|directory>".pad(16),"Add file");
+    console.log("-a --add".pad(16),"<file|directory>".pad(16),"Add files");
     console.log("-r --remote".pad(16),"<remote>".pad(16),"Set remote (http://hostname/collection:basedir)");
-    console.log("-c --create".pad(16),"".pad(16),"Creates collection");    
+    console.log("-c --create".pad(16),"".pad(16),"Creates collection");  
+    console.log("-p --push".pad(16),"".pad(16),"Push files to remote");  
     console.log("-i --init".pad(16),"".pad(16),"Initialize index");
     console.log("-f --force".pad(16),"".pad(16),"Force update");
 

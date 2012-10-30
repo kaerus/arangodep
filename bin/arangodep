@@ -1090,7 +1090,7 @@ function process_app(argv) {
 
 
     function store_file(file,done) {
-      var buf, data = {}, bin, doc, extended = {};
+      var buf, data = {headers:{}}, bin, doc, extended = {};
 
       try {
         buf = fs.readFileSync(basedir+'/'+file);
@@ -1098,23 +1098,23 @@ function process_app(argv) {
 
       bin = isBinary(buf,file);
       if(bin) {
-        data.contentEncoding = "base64";
-        data.data = buf.toString('base64');
-      } else data.data = buf.toString();
+        data.headers['content-encoding'] = 'base64';
+        data.content = buf.toString('base64');
+      } else data.content = buf.toString();
       data.file = remote.basedir+'/'+file;
-      data.contentType = mime.lookup(file);
+      data.headers['content-type'] = mime.lookup(file);
 
       doc = index.files[file].hasOwnProperty('_id') ? index.files[file] : null;
       if(doc !== null && doc._id){
         remote.document.putIfMatch(doc._id, doc._rev, data, function(err,ret) {
           if(err) error("Failed to deploy " +file + ": " + ret);
-          else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", file, data.data.length); 
+          else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", file, data.content.length); 
           done({_id:ret._id,_rev:ret._rev});
         });
       } else {
         remote.document.create(!!options.create, data, function(err,ret) {
           if(err) error("Failed to deploy " +file + ": " + ret);
-          else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", file, data.data.length); 
+          else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", file, data.content.length); 
           done({_id:ret._id,_rev:ret._rev});
         });
       } 

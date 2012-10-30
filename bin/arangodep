@@ -157,7 +157,7 @@ function traverseFiles(dir,callback,subdir){
   var files = fs.readdirSync(dir), 
       extname, realpath, basepath;    
   files.forEach(function(file){
-    realpath = subdir ? dir+PSEP+file : dir+file;
+    realpath = dir+PSEP+file;
     basepath = subdir ? subdir+PSEP+file : file;
     try {
       stat = fs.statSync(realpath);
@@ -166,7 +166,7 @@ function traverseFiles(dir,callback,subdir){
     if(stat.isDirectory()) {
       traverseFiles(realpath,callback,basepath);
     } else if(stat.isFile()) {
-      callback(realpath,basepath);
+      callback(realpath,basepath,stat);
     } else if(stat.isSymbolicLink()) {
       console.log("* Ignoring symlink", realpath);
     } else {
@@ -891,21 +891,18 @@ function process_route(argv) {
 /* deploy application */
 function process_app(argv) {
   var command = argv.shift()
-    , options = {modules:[], routes:[], store: []}
-    , files = [], sourcedir, remotehost, destdir, index
-    , now = new Date().toISOString()
-    , banner = program + " v" + package.version + " " + now;
+    , options = {modules:[], routes:[]}
+    , files = [], sourcedir, destdir, index
+    , now = new Date().toISOString();
 
   function help() {
     console.log("Deploy application");
     console.log("Command:", program + ' ' + command + " <options>");
     console.log("options".pad(16),"arguments".pad(16),"description");
     console.log("-h --help".pad(16),"".pad(16),"Shows this help" );
-    console.log("-c --create".pad(16),"<app>".pad(16),"Create application stub");
-    console.log("-n --name".pad(16),"<name>".pad(16),"Set or change name"); 
     console.log("-a --add".pad(16),"<file|directory>".pad(16),"Add file");
     console.log("-r --remote".pad(16),"<remote>".pad(16),"Set remote (http://hostname/collection:basedir)");
-    console.log("-i --init".pad(16),"".pad(16),"Initialize remote");
+    console.log("-i --init".pad(16),"".pad(16),"Initialize application");
     console.log("-f --force".pad(16),"".pad(16),"Force update");
 
     process.exit(0);
@@ -926,15 +923,7 @@ function process_app(argv) {
       case '-r':
       case '--route':
         options.routes.push(argv[++i].split(' '));
-        break;    
-      case '-c':
-      case '--create':
-        options.create = true;
-        break;    
-      case '-n':
-      case '--name':
-        options.name = argv[++i];
-        break;  
+        break;       
       case '-a':
       case '--add':
         options.add = true;
@@ -961,62 +950,10 @@ function process_app(argv) {
     }
   }
 
-  /* creates application stub */
-  if(options.create) {
-    var sourcedir = files.shift();
-    index = { remote:options.remote,
-                    name:options.name||path.basename(sourcedir),
-                    type:"web",
-                    language:"js",
-                    paths:[],
-                    files:[],
-                    created: now
-                  };
-
-    index.paths = [
-      "/actions",        
-      "/public",
-      "/public/css",
-      "/public/js"
-    ]; 
-
-    try {
-      stat = fs.statSync(sourcedir);
-    } catch(err) {
-      try{
-        fs.mkdirSync(sourcedir);
-      } catch (err) {
-        error("Failed to create " + sourcedir + ": " + err.message);
-      }
-    }
-    /* check if sourcedir is empty */
-    if(fs.readdirSync(sourcedir).length > 0)
-      error("Application directory is not empty!");
-
-    console.log("Creating application stub");
-    var destdir;
-
-    index.paths.forEach(function(file) {
-      try {
-        var destdir = sourcedir+file;
-        fs.statSync(destdir);
-      } catch(err) { 
-        fs.mkdirSync(destdir,0777, true);
-        console.log(destdir);
-      }
-    });
-    console.log();
-    console.log("Generating files");
-    /* write application file stubs */
-    write_file('public/index.html', "<!-- "+banner+" -->\n"+package.stubs.index);
-    write_file('public/css/stylesheet.css',"/* "+banner+" */\n"+package.stubs.stylesheet);
-    update_index(sourcedir);  
-    error("done.",0);
-  }          
+  var basedir  ='./';
 
   /* locate .index */
-  var basedir = './', down = 6;
-  while(down-- && !index) {
+  for(var cd = 4; cd && !index; cd--) {
     try {
       index = JSON.parse(fs.readFileSync(basedir+'.index'));
     } catch (err) {
@@ -1024,15 +961,12 @@ function process_app(argv) {
       else basedir += '../';  
     }
   } 
-  basedir = path.resolve(basedir);
-
-  if(!index){
-    error("Failed to locate .index");
-  }  
+  if(!index) error("Failed to locate .index");
+  
+  basedir = path.resolve(basedir); 
 
   if(options.add) {
-    var source = files.shift();
-    console.log("adding ", source);
+    var source = files.shift(), relpath;
     try {
       stat = fs.statSync(source);
     } catch (err) {
@@ -1043,22 +977,24 @@ function process_app(argv) {
     if(stat.isDirectory()){
       var subdir = path.relative(basedir,path.resolve(path.dirname(source)));
       traverseFiles(source,function(file){
-        index.paths.push(path.dirname(file));
-        index.files.push(file);
+        relpath = path.relative(basedir,path.resolve(file));
+        if(relpath[0]!=='.') {
+          console.log(relpath);
+          index.paths[path.dirname(relpath)] = index.paths[path.dirname(relpath)] || 0777;
+          index.files[relpath] = index.files[relpath] || {};
+        }  
       },subdir);
     } else if(stat.isFile()){
-      var relpath = path.relative(basedir,path.resolve(source));
-      index.paths.push(path.dirname(relpath));
-      index.files.push(relpath);
+      relpath = path.relative(basedir,path.resolve(source));
+      if(relpath[0]!=='.') {
+        console.log(relpath);
+        index.paths[path.dirname(relpath)] = index.paths[path.dirname(relpath)] || 0777;
+        index.files[relpath] = index.files[relpath] || {};
+      }  
     } else {
       error("Can not handle " + source);
     }
     update_index(basedir); 
-  }
-
-  if(options.name) {
-    index.name = options.name;
-    update_index(basedir);
   }
 
   if(options.remote) {
@@ -1067,94 +1003,110 @@ function process_app(argv) {
   }
 
   if(options.push) {
-    var remote = arangoConnection(index.remote);
-    
-    if(!remote){
-      error("Unspecified or invalid remote " + index.remote);
+    try { 
+      remote = arangoConnection(index.remote);
+    } catch(err) {
+      error("Invalid remote " + index.remote + ": " + err.message);
     }
   
-    /* check for existing */
-    remote.simple.first({"$key":remote.basedir+'/.index'}).on('result',function(res){
-      var remote_index = JSON.parse(res.document["$value"]);
-      if(!options.force && remote_index.updated === index.updated) {
+    /* check for existing index*/
+    remote.simple.first({file:remote.basedir+'/.index'}).on('result',function(res){
+      if(!options.force && index._rev !== res._rev) {
         console.log("Already upto date");
       } else {
-          /* update */
-        push_index(basedir,remote);
+        console.log("Remote push");
+        push_index(basedir,remote,{_id:res._id,_rev:res._rev,created:res.created});
       }
     }).on('error',function(err){
-      /* create new */
-      if(options.init||options.force) {
-        push_index(base,remote,options.init ? {create:true} : undefined);
-      } else error("Error on remote " + index.remote + ": " + err.message);    
+      if(options.init) push_index(basedir,remote,{create:true});
+      else error("Failed to locate remote .index on " + index.remote + ": " + err.message);    
     });
   }
 
-  function write_file(file,data,encoding) {
-      encoding = typeof encoding !== 'undefined' ? encoding  : 'utf8';
-
-      var i = index.files.push(file);
-      try{
-        fs.writeFileSync(sourcedir+PSEP+index.files[i-1], data, encoding);
-        console.log(file);
-      } catch(err) {
-        error("Failed to write: " + err.message);
-      }
+  function create_index(dir) {
+    index = {remote:'',paths:{},files:{},created:now}
+    try {
+      fs.writeFileSync(dir.PSEP+'.index', JSON.stringify(index,null,2));
+    } catch (err) {
+      error("Failed to create local index: " + err.message);
+    }
+    console.log("Created local index");
   }
 
   function update_index(dir){
-    index.files.replaceString(/^[.\/]*/,'');
-    index.paths.replaceString(/^[.\/]*/,'');
-    index.files = index.files.unique();
-    index.paths = index.paths.unique();
     index.updated = now;
     /* create index */
     try {     
       fs.writeFileSync(dir+PSEP+'.index', JSON.stringify(index, null, 2));
     } catch (err) {
-      error("Failed to update .index: " + err.message);
+      error("Failed to update local index: " + err.message);
     }
+    console.log("Updated local index");
   }
 
   function push_index(basedir,remote,options) {
     options = options || {};
-       
-    if(options.create) {
-      remote.collection.create().on('error', function(err){
-        error("Create failed: " + err.message);
-      }).on('result',store_index);
-    } else store_index();    
+    var data = {}, timeout = 10000, POLL_IV = 100;
 
-    function store_index() {
-      var extended = {};
-
-      extended.contentType = mime.lookup('.json');
-      remote.key.put(remote.basedir+'/.index',{extended:extended}, index, function(err,ret){
-        if(err) error("Failed to write .index: " + ret);
-        else {
-          console.log("Updated .index");
-          index.files.forEach(function(file){
-            store_file(file);
-          });
-        }
-      }); 
+    if(options._id) {
+      index._id = options._id;
+      index._rev = options._rev;
+      index.created = options.created;
     }
 
-    function store_file(file) {
-      var data, bin, extended = {};
+    if(index._id) remote.document.put(index._id, index, remote_index);
+    else remote.document.create(!!options.create, index, remote_index);
+
+    function remote_index(err,ret) {
+      if(err) error("Failed to push index: " + ret);
+
+      console.log("Pushed index");
+      var files = Object.keys(index.files), files_to_push = files.length;       
+      files.forEach(function(file){
+        store_file(file,function(ret){
+          index.files[file] = ret || '';
+          files_to_push--;
+        });
+      });
+
+      function until_done(){
+        if(timeout < 0) error("Push timedout!");
+        if(files_to_push > 0) setTimeout(until_done,POLL_IV);
+        else update_index(basedir);
+        timeout-=POLL_IV;
+      }
+      setTimeout(until_done,POLL_IV); 
+    }
+
+
+    function store_file(file,done) {
+      var buf, data = {}, bin, doc, extended = {};
 
       try {
-        data = fs.readFileSync(basedir+'/'+file);
+        buf = fs.readFileSync(basedir+'/'+file);
       } catch(err) { error("Failed to read: " + err.message) } 
 
-      bin = isBinary(data,file);
-      extended.contentType = mime.lookup(file);
-      if(bin) extended["contentEncoding"] = "base64";
-      remote.key.put(remote.basedir+'/'+file, {extended:extended}, 
-        bin ? data.toString('base64') : data, function(err,ret) {
+      if(bin = isBinary(data,buf)) {
+        data.contentEncoding = "base64";
+        data.data = buf.toString('base64');
+      } else data.data = buf.toString();
+      data.file = remote.basedir+'/'+file;
+      data.contentType = mime.lookup(file);
+
+      doc = index.files[file].hasOwnProperty('_id') ? index.files[file] : null;
+      if(doc !== null && doc._id){
+        remote.document.putIfMatch(doc._id, doc._rev, data, function(err,ret) {
           if(err) error("Failed to deploy " +file + ": " + ret);
-          else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", file, data.length);  
-      });
+          else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", file, data.data.length); 
+          done({_id:ret._id,_rev:ret._rev});
+        });
+      } else {
+        remote.document.create(!!options.create, data, function(err,ret) {
+          if(err) error("Failed to deploy " +file + ": " + ret);
+          else console.log("%s: %s (%s bytes)", bin ? "BIN" : "ASC", file, data.data.length); 
+          done({_id:ret._id,_rev:ret._rev});
+        });
+      } 
     }
   }
 /*

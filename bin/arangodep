@@ -22,7 +22,7 @@ var program, trace = false,
 try {
     program = require('arangodep');
 } catch(e) {
-    program = require('../index');  
+    program = require('../arangodep');  
 }
 
 program.help = function(command,help) {

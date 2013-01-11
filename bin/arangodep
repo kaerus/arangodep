@@ -30,7 +30,6 @@ program.help = function(command,help) {
     console.log("Created by " + package.author.name + " <"+package.author.email+">");
     console.log("Help:",command);
     console.log(help);
-    process.exit(0);
 }  
 
 process.argv.splice(0,2);

@@ -7,7 +7,10 @@ Install
 -------
 ```
 sudo npm install git://github.com/kaerus/arangodep -g
+npm i
 ```
+
+Since arangodep depends on <a href="https://github.com/kaerus/program.js">program.js</a> which is under heavy development you must make sure you have the latest/correct version until the API stabilizes. In other words, check-out frequently and report issues if you experience any problems.
 
 Usage
 -----

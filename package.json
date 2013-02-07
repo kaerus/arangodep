@@ -1,6 +1,6 @@
 {
   "name": "arangodep",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "ArangoDB deployment tool",
   "keywords": [
     "arango client",

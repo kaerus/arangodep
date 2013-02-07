@@ -129,7 +129,7 @@ Route added: {"url":{"match":"/simple","methods":["GET","HEAD","POST","PATCH","D
 Routes can be wildcarded so that for example the first portion of the url (prefix) matches.
 ```
  arangodep routes add url /test/* controller /com/kaerus/test
- Route added: {"url":"/test/something","action":{"controller":"/com/kaerus/test"}}
+ Route added: {"url":"/test/*","action":{"controller":"/com/kaerus/test"}}
 ```
 In this case it is required to also declare which controller to use since ArangoDB would otherwise forward requests to a controller path which also includes the wildcarded-suffix part of the url ```<controller-path>/<url-suffix>```.  
 
@@ -141,7 +141,7 @@ arangodep routes add url /users/:uid/profile
 The content of the :uid segment is extracted as a parameter for the receiving controller so that the url ```/users/4321/profile``` would in this case produce the parameter ```uid:4321```. 
 
 
-It is also possible to specify constraints on named url segments to for example enforce a format. 
+It is also possible to specify constraints on named url segments to enforce a parameter format. 
 ```
 arangodep routes add url /users/:uid/profile constraint '{"uid":"\d{3}"}'
 Route added: {"url":{"match":"/users/:uid/profile","constraint":{"uid":"[0-9]{3}"}},"action":{}}
@@ -157,7 +157,7 @@ Route added: {"url":{"match":"/users/:uid/profile","constraint":{"uid":"[0-9]{3}
       }
     }
 ```
-As shown above :uid must now consist of three digits.
+As shown above :uid must now be made up of three digits.
 
 Action controllers (modules)
 ----------------------------

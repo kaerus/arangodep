@@ -16,31 +16,14 @@
  *
  */
 
-var program, trace = false, 
-    package = require("../package");
 
 try {
-    program = require('arangodep');
+    require('arangodep');
 } catch(e) {
-    program = require('../arangodep');  
+    require('../arangodep');  
 }
 
-program.help = function(command,help) {
-    console.log(package.description + " version " + package.version);
-    console.log("Created by " + package.author.name + " <"+package.author.email+">");
-    console.log("Help:",command);
-    console.log(help);
-}  
-
-process.argv.splice(0,2);
-
-if(process.argv[0] === '--trace') {
-    trace = true;
-    process.argv.splice(0,1);
-}    
-
-if(!process.argv.length) program.run("?",trace);
-else program.run(process.argv,trace);
+Program.boot();
 
 
 

@@ -23,7 +23,7 @@ try {
     require('../arangodep');  
 }
 
-Program.boot();
+Program.run();
 
 
 

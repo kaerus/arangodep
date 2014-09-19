@@ -23,6 +23,28 @@ try {
     require('../arangodep');  
 }
 
+
+var package;
+
+try {
+    package = require('package');
+} catch(e){
+    package = require('../package');
+}
+
+Program.application = {
+    name: package.name,
+    version: package.version,
+    description: package.description,
+    author: package.author,
+    banner : function(){
+	var str = this.name + ' v' + this.version + '\n';
+	str+= this.description + ' created by ' + this.author.name + ' <' + this.author.email + '>\n';
+	
+	return str;
+    }
+};
+
 Program.run();
 
 
